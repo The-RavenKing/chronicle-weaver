@@ -1,0 +1,22 @@
+# Node modules
+node_modules/
+
+# Editor directories
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+
+# Distribution
+*.zip
+
+# Keep assets folder but ignore temp files in it
+assets/*.psd
+assets/*.ai
+assets/*.sketch

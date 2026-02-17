@@ -1,0 +1,52 @@
+{
+  "id": "chronicle-weaver",
+  "title": "Chronicle Weaver",
+  "version": "2.0.0",
+  "compatibility": {
+    "minimum": "11",
+    "verified": "13",
+    "maximum": "13"
+  },
+  "description": "AI-powered storytelling assistant for Foundry VTT. Weaves tales using Grimoires (Lorebooks), Souls (Personas), and Spirits (Characters). Compatible with Silly Tavern formats.",
+  "authors": [
+    {
+      "name": "The-RavenKing",
+      "url": "https://github.com/The-RavenKing",
+      "flags": {}
+    }
+  ],
+  "relationships": {
+    "systems": [],
+    "requires": []
+  },
+  "esmodules": [
+    "scripts/chronicle-weaver.js"
+  ],
+  "styles": [
+    "styles/chronicle-weaver.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "url": "https://github.com/The-RavenKing/chronicle-weaver",
+  "manifest": "https://github.com/The-RavenKing/chronicle-weaver/releases/latest/download/module.json",
+  "download": "https://github.com/The-RavenKing/chronicle-weaver/releases/latest/download/chronicle-weaver.zip",
+  "license": "LICENSE",
+  "readme": "README.md",
+  "bugs": "https://github.com/The-RavenKing/chronicle-weaver/issues",
+  "changelog": "CHANGELOG.md",
+  "media": [
+    {
+      "type": "icon",
+      "url": "https://raw.githubusercontent.com/The-RavenKing/chronicle-weaver/main/assets/icon.png"
+    },
+    {
+      "type": "cover",
+      "url": "https://raw.githubusercontent.com/The-RavenKing/chronicle-weaver/main/assets/cover.png"
+    }
+  ]
+}

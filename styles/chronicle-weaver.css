@@ -1,0 +1,43 @@
+/* Ollama Storyteller Styles */
+.chronicle-message {
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.chronicle-question {
+    background: rgba(100, 150, 255, 0.1);
+    border-left: 3px solid #6496ff;
+}
+
+.chronicle-response {
+    background: rgba(255, 100, 100, 0.1);
+    border-left: 3px solid #ff6464;
+}
+
+/* Config Window Styles */
+.chronicle-weaver-config .item-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.chronicle-weaver-config .item {
+    padding: 5px;
+    border-bottom: 1px solid #787878;
+    align-items: center;
+}
+
+.chronicle-weaver-config .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #000;
+}
+
+.chronicle-weaver-config .tabs {
+    flex: 0 0 30px;
+    border-bottom: 1px solid #787878;
+    margin-bottom: 10px;
+}
