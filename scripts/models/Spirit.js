@@ -14,6 +14,7 @@ export class Spirit {
         this.creator = data.creator || "";
         this.character_version = data.character_version || "";
         this.extensions = data.extensions || {};
+        this.color = data.color || "#ffffff";
     }
 
     /**
@@ -42,7 +43,8 @@ export class Spirit {
             tags: this.tags,
             creator: this.creator,
             character_version: this.character_version,
-            extensions: this.extensions
+            extensions: this.extensions,
+            color: this.color
         };
     }
 }

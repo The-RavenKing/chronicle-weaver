@@ -161,6 +161,98 @@ Hooks.once('init', () => {
             }
         });
     }
+
+
+    // --------------------------------------------------------
+    // FEATURE: Colored Dialogue (SillyTavern Style)
+    // --------------------------------------------------------
+    Hooks.on('renderChatMessage', (message, html, data) => {
+        const speaker = message.speaker;
+        if (!speaker.alias) return;
+
+        let color = null;
+
+        // 1. Check if AI (Spirit)
+        if (message.getFlag(MODULE_ID, 'isAI')) {
+            const spirit = game.chronicleWeaver.spirits.find(s => s.name === speaker.alias);
+            if (spirit && spirit.color) color = spirit.color;
+        }
+        // 2. Check if PC (Soul)
+        else {
+            // Try by Actor ID
+            if (speaker.actor) {
+                const soul = game.chronicleWeaver.souls.find(s => s.foundry_actor_id === speaker.actor);
+                if (soul && soul.color) color = soul.color;
+            }
+            // Fallback by Name (e.g. if unlinked or different actor)
+            if (!color) {
+                const soul = game.chronicleWeaver.souls.find(s => s.name === speaker.alias);
+                if (soul && soul.color) color = soul.color;
+            }
+        }
+
+        // Apply formatting (Speech & Actions) - utilizing Text Node traversal to avoid breaking HTML attributes
+        const contentDiv = html.find('.message-content');
+
+        // Helper to process text nodes
+        function processTextNodes(node) {
+            if (node.nodeType === 3) { // Text node
+                let text = node.nodeValue;
+                let changed = false;
+
+                // Single-pass replacement to avoid regex collisions and handle formatting
+                // 1. **Markdown Bold Action** (e.g. **Speaker:**) - frequent in AI output
+                // 2. *Markdown Italic Action* (e.g. *sits down*)
+                // 3. "Speech"
+                const regex = /(\*\*[^*]+\*\*)|(\*[^*]+\*)|("[^"]+")/g;
+
+                if (regex.test(text)) {
+                    const newHtml = text.replace(regex, (match, boldAction, italicAction, speechGroup) => {
+                        if (boldAction) {
+                            // Handle **Speaker:** -> Bold + Action color
+                            // If it ends with ':', it's likely a speaker label -> Add Line Break before
+                            const isHeader = boldAction.includes(':');
+                            const content = `<strong><span class="cw-action">${boldAction.replace(/\*\*/g, '')}</span></strong>`;
+                            return isHeader ? `<br/><br/>${content} ` : content;
+                        } else if (italicAction) {
+                            // Handle *Action* -> Italic + Action color
+                            // If it looks like a header (e.g. *Speaker:*), add break
+                            const isHeader = italicAction.includes(':');
+                            const content = `<span class="cw-action">${italicAction}</span>`;
+                            return isHeader ? `<br/><br/>${content} ` : content;
+                        } else if (speechGroup) {
+                            // Handle "Speech" -> Bold (via CSS)
+                            return `<span class="cw-speech">${speechGroup}</span>`;
+                        }
+                        return match;
+                    });
+
+                    const span = document.createElement('span');
+                    span.innerHTML = newHtml;
+                    node.parentNode.replaceChild(span, node);
+                }
+            } else if (node.nodeType === 1) { // Element node
+                // Recursively handle children, but skip our own inserted spans to avoid double processing if re-run
+                if (!node.classList.contains('cw-action') && !node.classList.contains('cw-speech')) {
+                    Array.from(node.childNodes).forEach(processTextNodes);
+                }
+            }
+        }
+
+        contentDiv.contents().each(function () {
+            processTextNodes(this);
+        });
+
+        if (color && color !== '#ffffff') {
+            // Apply visual styling
+            html.css('border-left', `4px solid ${color}`);
+            html.find('.message-header .message-sender').css('color', color);
+            html.find('.message-header .message-sender').css('font-weight', 'bold');
+            // Optional: Subtle background tint
+            html.css('background', `linear-gradient(to right, ${color}11, transparent)`);
+        }
+
+    });
 });
 
 Hooks.once('ready', async () => {
@@ -447,3 +539,4 @@ function handleChatCommand(chatLog, message, chatData) {
 function stripHtml(html) {
     return html?.replace(/<[^>]*>/gm, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').trim() || '';
 }
+

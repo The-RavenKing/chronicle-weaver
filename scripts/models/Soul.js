@@ -33,6 +33,7 @@ export class Soul {
         // Links
         this.foundry_actor_id = data.foundry_actor_id || null;
         this.user_id = data.user_id || null;
+        this.color = data.color || "#ffffff";
     }
 
     /**
@@ -117,7 +118,8 @@ export class Soul {
             equipment: this.equipment,
             gold: this.gold,
             foundry_actor_id: this.foundry_actor_id,
-            user_id: this.user_id
+            user_id: this.user_id,
+            color: this.color
         };
     }
 }

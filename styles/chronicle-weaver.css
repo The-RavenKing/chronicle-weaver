@@ -41,3 +41,15 @@
     border-bottom: 1px solid #787878;
     margin-bottom: 10px;
 }
+
+/* Feature: Speech Formatting */
+.cw-speech {
+    font-weight: bold;
+    /* Color removed for better contrast/readability per user request */
+}
+
+.cw-action {
+    font-style: italic;
+    color: #666666;
+    /* Medium gray for actions */
+}

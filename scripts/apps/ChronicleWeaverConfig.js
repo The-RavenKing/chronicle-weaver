@@ -97,6 +97,10 @@ export class ChronicleWeaverConfig extends FormApplication {
                     <input type="text" name="name" value="${esc(spirit.name)}" required>
                 </div>
                 <div class="form-group">
+                    <label>Color</label>
+                    <input type="color" name="color" value="${esc(spirit.color || '#ffffff')}" style="height: 30px; width: 100%;">
+                </div>
+                <div class="form-group">
                     <label>Description</label>
                     <textarea name="description" rows="3">${esc(spirit.description)}</textarea>
                 </div>
@@ -143,6 +147,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                                     spirit.scenario = data.scenario || spirit.scenario;
                                     spirit.system_prompt = data.system_prompt || spirit.system_prompt;
                                     spirit.first_message = data.first_message || spirit.first_message;
+                                    // Keep existing color if JSON doesn't specify (custom field)
                                     ui.notifications.info("Overwrote fields from JSON.");
                                 }
                             } catch (err) {
@@ -150,6 +155,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                             }
                         } else {
                             spirit.name = form.elements['name']?.value || spirit.name;
+                            spirit.color = form.color.value;
                             spirit.description = form.description.value;
                             spirit.personality = form.personality.value;
                             spirit.scenario = form.scenario.value;
@@ -173,6 +179,10 @@ export class ChronicleWeaverConfig extends FormApplication {
                 <div class="form-group">
                     <label>Name</label>
                     <input type="text" name="name" value="${esc(soul.name)}" required>
+                </div>
+                <div class="form-group">
+                    <label>Color</label>
+                    <input type="color" name="color" value="${esc(soul.color || '#ffffff')}" style="height: 30px; width: 100%;">
                 </div>
                 <div class="form-group">
                     <label>Class</label>
@@ -220,6 +230,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                             }
                         } else {
                             soul.name = form.elements['name']?.value || soul.name;
+                            soul.color = form.color.value;
                             soul.attributes.class = form.elements['class']?.value ?? soul.attributes.class;
                             soul.attributes.level = parseInt(form.elements['level']?.value) || 1;
                             soul.description = form.description.value;
