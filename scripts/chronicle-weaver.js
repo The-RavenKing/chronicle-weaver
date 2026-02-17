@@ -89,10 +89,10 @@ Hooks.once('init', () => {
         // Dedup: Check if button already exists in DOM
         // Note: html might be the window OR content depending on app type.
         // We look broadly.
-        const appElement = app.element && app.element[0] ? app.element : html;
-
-        // Try to find header window
-        const windowHeader = appElement.closest('.window-app')?.find('.window-header');
+        const appWindow = $(app.element);
+        const windowHeader = appWindow.hasClass('window-app')
+            ? appWindow.find('.window-header')
+            : appWindow.closest('.window-app').find('.window-header');
 
         if (windowHeader && windowHeader.length > 0) {
             if (windowHeader.find('.cw-pc-toggle').length === 0) {
@@ -219,8 +219,11 @@ Hooks.once('ready', async () => {
         // Check if message is from AI
         if (message.getFlag(MODULE_ID, 'isAI')) return;
 
-        // Only respond to IC speech (0), emotes (1), OOC (2) - ignore rolls, system messages etc.
-        if (![0, 1, 2].includes(message.type)) return;
+        // Guard: skip rolls and system messages in a v11–v13 compatible way
+        const skipTypes = ['roll', 'whisper'];
+        if (skipTypes.includes(message.type)) return;
+        // Also skip pure rolls that lack a speaker alias (system messages)
+        if (!message.speaker?.alias && message.rolls?.length > 0) return;
 
         // Setup Context
         const activeSpiritId = game.settings.get(MODULE_ID, 'activeSpirit');
@@ -238,10 +241,10 @@ Hooks.once('ready', async () => {
             .slice(-historyDepth)
             .map(m => ({
                 role: m.getFlag(MODULE_ID, 'isAI') ? 'assistant' : 'user',
-                content: `${m.speaker.alias || 'Unknown'}: ${m.content}`
+                content: `${m.speaker.alias || 'Unknown'}: ${stripHtml(m.content)}`
             }));
 
-        const prompt = `${message.speaker.alias || 'User'}: ${message.content}`;
+        const prompt = `${message.speaker.alias || 'User'}: ${stripHtml(message.content)}`;
 
         const response = await game.chronicleWeaver.chatService.generateResponse(prompt, {
             spirit: activeSpirit,
@@ -435,4 +438,8 @@ function handleChatCommand(chatLog, message, chatData) {
     }
 
     return true;
+}
+
+function stripHtml(html) {
+    return html?.replace(/<[^>]*>/gm, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').trim() || '';
 }

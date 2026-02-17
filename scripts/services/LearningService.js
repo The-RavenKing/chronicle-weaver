@@ -46,7 +46,7 @@ export class LearningService {
 
         // 2. Prepare Chunks (Simple Text Blob for now)
         // Group by 10-20 messages maybe? Let's just do one big chunk for MVP
-        const combinedText = newMessages.map(m => `${m.speaker.alias || 'Unknown'}: ${m.content}`).join('\n');
+        const combinedText = newMessages.map(m => `${m.speaker.alias || 'Unknown'}: ${this._stripHtml(m.content)}`).join('\n');
 
         // 3. Analyze with Reader Model
         const ollamaUrl = game.settings.get('chronicle-weaver', 'ollamaUrl');
@@ -166,29 +166,45 @@ Format:
 
     async updateGrimoire(entries) {
         const pending = game.settings.get('chronicle-weaver', 'pending_entries') || [];
-        let added = 0;
 
+        // Build a set of existing key fingerprints (pending + approved grimoires)
+        const existingFingerprints = new Set();
+        for (const p of pending) {
+            existingFingerprints.add((p.keys || []).map(k => k.toLowerCase()).sort().join('|'));
+        }
+        for (const g of game.chronicleWeaver.grimoires) {
+            for (const e of g.entries) {
+                existingFingerprints.add((e.keys || []).map(k => k.toLowerCase()).sort().join('|'));
+            }
+        }
+
+        let added = 0;
         for (const entry of entries) {
-            // Simple duplicate check against pending + existing Grimoires needed?
-            // For now just push to pending.
+            const fingerprint = (entry.keys || []).map(k => k.toLowerCase()).sort().join('|');
+            if (existingFingerprints.has(fingerprint)) continue; // Skip duplicate
+
             pending.push({
                 id: foundry.utils.randomID(),
                 keys: entry.keys,
                 content: entry.content,
                 confidence: entry.confidence || null,
                 source: 'learned',
-                timestamp: Date.now(),
+                timestamp: Date.now(), // Fixed syntax error from original snippet
                 status: 'pending'
             });
+            existingFingerprints.add(fingerprint); // Prevent within-batch duplicates too
             added++;
         }
 
         if (added > 0) {
             await game.settings.set('chronicle-weaver', 'pending_entries', pending);
-            ui.notifications.info(`Chronicle Weaver: ${added} entries ready for review`);
-            // Optionally trigger a re-render of the config or badge if open
+            ui.notifications.info(`Chronicle Weaver: ${added} new entries ready for review`);
         } else {
-            ui.notifications.info("Chronicle Weaver: No new lore found.");
+            ui.notifications.info("Chronicle Weaver: No new lore found (all entries already known).");
         }
+    }
+
+    _stripHtml(html) {
+        return html?.replace(/<[^>]*>/gm, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').trim() || '';
     }
 }

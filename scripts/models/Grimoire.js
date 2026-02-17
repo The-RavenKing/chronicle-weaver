@@ -45,9 +45,10 @@ export class Grimoire {
                 if (!secondaryMatched) matched = false;
             }
 
-            if (matched && !seenEntries.has(entry.uid)) {
+            const entryKey = entry.uid ?? `__idx_${this.entries.indexOf(entry)}`;
+            if (matched && !seenEntries.has(entryKey)) {
                 matches.push(entry);
-                seenEntries.add(entry.uid);
+                seenEntries.add(entryKey);
             }
         }
 

@@ -220,8 +220,8 @@ export class ChronicleWeaverConfig extends FormApplication {
                             }
                         } else {
                             soul.name = form.name.value;
-                            soul.attributes.class = form.class.value;
-                            soul.attributes.level = parseInt(form.level.value) || 1;
+                            soul.attributes.class = form.elements['class']?.value ?? soul.attributes.class;
+                            soul.attributes.level = parseInt(form.elements['level']?.value) || 1;
                             soul.description = form.description.value;
                         }
 
@@ -245,7 +245,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                 </div>
                 <div class="form-group">
                     <label>JSON Entries (Read-Only/Manual Edit)</label>
-                    <textarea name="entries" rows="10" style="font-family: monospace; font-size: 0.8em;">${JSON.stringify(grimoire.entries, null, 2)}</textarea>
+                    <textarea name="entries" rows="10" style="font-family: monospace; font-size: 0.8em;">${this._esc(JSON.stringify(grimoire.entries, null, 2))}</textarea>
                     <p class="notes">Format: <code>[{"uid": "unique-id", "keys": ["key1"], "content": "text", "enabled": true}]</code>. The uid field must be unique per entry.</p>
                 </div>
             </form>
@@ -311,7 +311,7 @@ export class ChronicleWeaverConfig extends FormApplication {
             if (response.ok) {
                 ui.notifications.info(`Chronicle Weaver: Connected to Ollama successfully!`);
                 // Auto-refresh models on success
-                await this._onRefreshModels(event);
+                await this._onRefreshModels(null);
             } else {
                 throw new Error(response.statusText);
             }
