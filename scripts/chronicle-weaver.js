@@ -236,8 +236,9 @@ Hooks.once('ready', async () => {
 
         // Build history
         const historyDepth = game.settings.get(MODULE_ID, 'historyDepth');
+        const SKIP_HISTORY_TYPES = new Set(['roll', 'whisper', 'other']);
         const history = game.messages.contents
-            .filter(m => m.id !== message.id && [0, 1, 2].includes(m.type))
+            .filter(m => m.id !== message.id && !SKIP_HISTORY_TYPES.has(m.type))
             .slice(-historyDepth)
             .map(m => ({
                 role: m.getFlag(MODULE_ID, 'isAI') ? 'assistant' : 'user',
@@ -259,7 +260,7 @@ Hooks.once('ready', async () => {
                 await ChatMessage.create({
                     content: response,
                     speaker: { alias: aiName },
-                    type: 0, // CONST.CHAT_MESSAGE_TYPES.OTHER
+                    type: CONST.CHAT_MESSAGE_STYLES?.OTHER ?? CONST.CHAT_MESSAGE_TYPES?.OTHER ?? 0,
                     flags: {
                         [MODULE_ID]: { isAI: true }
                     }
@@ -432,7 +433,10 @@ function handleChatCommand(chatLog, message, chatData) {
         // Trigger learning manually
         ui.notifications.info("Chronicle Weaver: Starting learning process...");
         if (game.chronicleWeaver.learningService) {
-            game.chronicleWeaver.learningService.learnFromChat();
+            game.chronicleWeaver.learningService.learnFromChat().catch(err => {
+                console.error("Chronicle Weaver | learnFromChat failed:", err);
+                ui.notifications.error("Chronicle Weaver: Learning process encountered an unexpected error. Check the console.");
+            });
         }
         return false;
     }

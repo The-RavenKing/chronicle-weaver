@@ -34,6 +34,11 @@ export class ReviewQueueApp extends FormApplication {
                 return;
             }
 
+            if (!content || content.trim().length === 0) {
+                ui.notifications.warn('Chronicle Weaver: Please enter a description before approving.');
+                return;
+            }
+
             await this._approveEntry(id, keys, content);
         });
 

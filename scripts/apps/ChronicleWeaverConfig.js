@@ -149,7 +149,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                                 ui.notifications.warn("Invalid JSON pasted. Using form fields.");
                             }
                         } else {
-                            spirit.name = form.name.value;
+                            spirit.name = form.elements['name']?.value || spirit.name;
                             spirit.description = form.description.value;
                             spirit.personality = form.personality.value;
                             spirit.scenario = form.scenario.value;
@@ -219,7 +219,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                                 ui.notifications.warn("Invalid JSON pasted. Using form fields.");
                             }
                         } else {
-                            soul.name = form.name.value;
+                            soul.name = form.elements['name']?.value || soul.name;
                             soul.attributes.class = form.elements['class']?.value ?? soul.attributes.class;
                             soul.attributes.level = parseInt(form.elements['level']?.value) || 1;
                             soul.description = form.description.value;
@@ -260,7 +260,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                     icon: '<i class="fas fa-save"></i>',
                     callback: async (html) => {
                         const form = html.find('form')[0];
-                        grimoire.name = form.name.value;
+                        grimoire.name = form.elements['name']?.value || grimoire.name;
                         try {
                             const parsed = JSON.parse(form.entries.value);
                             // Normalise: ensure every entry has uid and enabled
@@ -331,10 +331,15 @@ export class ChronicleWeaverConfig extends FormApplication {
             if (!response.ok) throw new Error("Failed to fetch models");
 
             const data = await response.json();
-            const models = data.models.map(m => m.name);
+            const models = (data.models ?? []).map(m => m.name);
+
+            if (models.length === 0) {
+                ui.notifications.warn("Chronicle Weaver: Connected but no models found. Have you pulled a model with `ollama pull`?");
+            } else {
+                ui.notifications.info(`Chronicle Weaver: Found ${models.length} models.`);
+            }
 
             await game.settings.set('chronicle-weaver', 'ollamaContextModels', models);
-            ui.notifications.info(`Chronicle Weaver: Found ${models.length} models.`);
             this.render(); // Re-render to populate dropdowns
 
         } catch (error) {
@@ -386,7 +391,7 @@ export class ChronicleWeaverConfig extends FormApplication {
         ev.preventDefault();
 
         // Simple dialog to select an actor
-        const actors = game.actors.contents.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+        const actors = game.actors.contents.map(a => `<option value="${this._esc(a.id)}">${this._esc(a.name)}</option>`).join('');
 
         new Dialog({
             title: "Import Soul from Actor",

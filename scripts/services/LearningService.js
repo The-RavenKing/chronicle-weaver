@@ -46,7 +46,15 @@ export class LearningService {
 
         // 2. Prepare Chunks (Simple Text Blob for now)
         // Group by 10-20 messages maybe? Let's just do one big chunk for MVP
-        const combinedText = newMessages.map(m => `${m.speaker.alias || 'Unknown'}: ${this._stripHtml(m.content)}`).join('\n');
+        const combinedText = newMessages
+            .filter(m => !m.getFlag('chronicle-weaver', 'isAI'))
+            .map(m => `${m.speaker.alias || 'Unknown'}: ${this._stripHtml(m.content)}`)
+            .join('\n');
+
+        if (!combinedText.trim()) {
+            ui.notifications.info("Chronicle Weaver: No new player/GM messages to learn from.");
+            return;
+        }
 
         // 3. Analyze with Reader Model
         const ollamaUrl = game.settings.get('chronicle-weaver', 'ollamaUrl');
@@ -144,15 +152,23 @@ Format:
             if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
 
             const data = await response.json();
-            let entries = [];
+            let parsed;
             try {
-                entries = JSON.parse(data.response.replace(/```json/g, '').replace(/```/g, '').trim());
+                parsed = JSON.parse(data.response.replace(/```json/g, '').replace(/```/g, '').trim());
             } catch (e) {
                 console.warn("Chronicle Weaver | Failed to parse Coder JSON:", e);
                 return false;
             }
 
-            if (Array.isArray(entries) && entries.length > 0) {
+            // Unwrap if the model returned a keyed object instead of a bare array
+            if (!Array.isArray(parsed) && typeof parsed === 'object' && parsed !== null) {
+                // Try common wrapper keys used by models
+                parsed = parsed.entries ?? parsed.lore ?? parsed.lorebook ?? parsed.results ?? Object.values(parsed)[0] ?? [];
+            }
+
+            const entries = Array.isArray(parsed) ? parsed : [];
+
+            if (entries.length > 0) {
                 await this.updateGrimoire(entries);
             }
 
@@ -180,16 +196,35 @@ Format:
 
         let added = 0;
         for (const entry of entries) {
-            const fingerprint = (entry.keys || []).map(k => k.toLowerCase()).sort().join('|');
+            // Normalise: ensure keys is always an array of non-empty strings
+            const rawKeys = entry.keys;
+            const keys = Array.isArray(rawKeys)
+                ? rawKeys.map(k => String(k).trim()).filter(k => k.length > 0)
+                : (typeof rawKeys === 'string' && rawKeys.trim())
+                    ? [rawKeys.trim()]
+                    : [];
+
+            // Normalise: ensure content is always a non-empty string
+            const content = (entry.content != null && String(entry.content).trim())
+                ? String(entry.content).trim()
+                : null;
+
+            // Skip entirely invalid entries
+            if (keys.length === 0 || !content) {
+                console.warn("Chronicle Weaver | Skipping invalid entry (missing keys or content):", entry);
+                continue;
+            }
+
+            const fingerprint = keys.map(k => k.toLowerCase()).sort().join('|');
             if (existingFingerprints.has(fingerprint)) continue; // Skip duplicate
 
             pending.push({
                 id: foundry.utils.randomID(),
-                keys: entry.keys,
-                content: entry.content,
+                keys,
+                content,
                 confidence: entry.confidence || null,
                 source: 'learned',
-                timestamp: Date.now(), // Fixed syntax error from original snippet
+                timestamp: Date.now(),
                 status: 'pending'
             });
             existingFingerprints.add(fingerprint); // Prevent within-batch duplicates too

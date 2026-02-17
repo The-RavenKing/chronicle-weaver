@@ -10,17 +10,21 @@ export class Soul {
         this.background = data.background || "";
 
         // PC specific fields
-        this.attributes = data.attributes || {
+        this.attributes = {
             class: "Unknown",
             subclass: "",
             level: 1,
             race: "Unknown",
-            background: ""
+            background: "",
+            ...(data.attributes || {})
         };
 
-        this.stats = data.stats || {
-            hp: { current: 10, max: 10 },
-            ac: 10
+        this.stats = {
+            hp: {
+                current: data.stats?.hp?.current ?? 10,
+                max: data.stats?.hp?.max ?? 10
+            },
+            ac: data.stats?.ac ?? 10
         };
 
         this.equipment = data.equipment || [];
@@ -77,7 +81,7 @@ export class Soul {
         this.background = this.attributes.background;
 
         // Bio
-        if (!this.description) this.description = sys.details?.biography?.value?.replace(/<[^>]*>?/gm, '') || "";
+        if (!this.description) this.description = sys.details?.biography?.value?.replace(/<[^>]*>/gm, '') || "";
 
         // Stats
         this.stats.hp = {

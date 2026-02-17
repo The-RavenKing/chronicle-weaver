@@ -92,7 +92,9 @@ export class ChatService {
         if (triggered.length > 0) {
             systemContent += '\n\n## World Information\n';
             // Deduplicate entries by uid (Grimoire entries use uid, not id)
-            const uniqueEntries = [...new Map(triggered.map(item => [item.uid, item])).values()];
+            const uniqueEntries = [...new Map(
+                triggered.map((item, idx) => [item.uid ?? `__idx_${idx}`, item])
+            ).values()];
             uniqueEntries.forEach(entry => {
                 const label = entry.keys?.length > 0 ? entry.keys[0] : 'Info';
                 systemContent += `- ${label}: ${entry.content}\n`;
@@ -118,6 +120,11 @@ export class ChatService {
         // 4. Conversation History
         if (history && history.length > 0) {
             history.forEach(msg => messages.push(msg));
+        }
+
+        // Inject post-history instructions if present (SillyTavern feature)
+        if (spirit?.post_history_instructions) {
+            messages.push({ role: 'system', content: spirit.post_history_instructions });
         }
 
         // 5. Current user message
