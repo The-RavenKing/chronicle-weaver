@@ -65,6 +65,215 @@ export class ChronicleWeaverConfig extends FormApplication {
         html.find('.import-soul-actor').click(this._onImportSoulFromActor.bind(this));
         // Active Spirit
         html.find('.active-spirit-select').change(this._onActiveSpiritChange.bind(this));
+
+        // Edit Item
+        html.find('.item-edit').click(this._onItemEdit.bind(this));
+    }
+
+    async _onItemEdit(event) {
+        event.preventDefault();
+        const li = $(event.currentTarget).parents('.item');
+        const id = li.data('id');
+        const type = li.data('type'); // spirit, soul, grimoire
+
+        if (type === 'spirit') {
+            const spirit = game.chronicleWeaver.spirits.find(s => s.id === id);
+            if (spirit) this._editSpirit(spirit);
+        } else if (type === 'soul') {
+            const soul = game.chronicleWeaver.souls.find(s => s.id === id);
+            if (soul) this._editSoul(soul);
+        } else if (type === 'grimoire') {
+            const grimoire = game.chronicleWeaver.grimoires.find(g => g.id === id);
+            if (grimoire) this._editGrimoire(grimoire);
+        }
+    }
+
+    async _editSpirit(spirit) {
+        const content = `
+            <form>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" name="name" value="${spirit.name}" required>
+                </div>
+                <!-- ... existing fields ... -->
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea name="description" rows="3">${spirit.description}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Personality</label>
+                    <textarea name="personality" rows="3">${spirit.personality}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Scenario</label>
+                    <textarea name="scenario" rows="3">${spirit.scenario}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>System Prompt (Override)</label>
+                    <textarea name="system_prompt" rows="3">${spirit.system_prompt}</textarea>
+                    <p class="notes">Leave empty to use Description + Personality + Scenario.</p>
+                </div>
+                <hr>
+                <div class="form-group">
+                    <label>Update from JSON (SillyTavern Card)</label>
+                    <textarea name="json_import" rows="3" placeholder="Paste JSON here to overwrite fields..."></textarea>
+                </div>
+            </form>
+        `;
+
+        new Dialog({
+            title: `Edit Spirit: ${spirit.name}`,
+            content: content,
+            buttons: {
+                save: {
+                    label: "Save Spirit",
+                    icon: '<i class="fas fa-save"></i>',
+                    callback: async (html) => {
+                        const form = html.find('form')[0];
+                        const jsonText = form.json_import.value.trim();
+
+                        if (jsonText) {
+                            try {
+                                const json = JSON.parse(jsonText);
+                                const data = this._parseSillyTavernCard(json);
+                                if (data) {
+                                    spirit.name = data.name || spirit.name;
+                                    spirit.description = data.description || spirit.description;
+                                    spirit.personality = data.personality || spirit.personality;
+                                    spirit.scenario = data.scenario || spirit.scenario;
+                                    spirit.system_prompt = data.system_prompt || spirit.system_prompt;
+                                    ui.notifications.info("Overwrote fields from JSON.");
+                                }
+                            } catch (e) {
+                                ui.notifications.warn("Invalid JSON pasted. Using form fields.");
+                            }
+                        } else {
+                            spirit.name = form.name.value;
+                            spirit.description = form.description.value;
+                            spirit.personality = form.personality.value;
+                            spirit.scenario = form.scenario.value;
+                            spirit.system_prompt = form.system_prompt.value;
+                        }
+
+                        await game.settings.set('chronicle-weaver', 'data_spirits', game.chronicleWeaver.spirits.map(s => s.toJSON()));
+                        this.render();
+                        ui.notifications.info(`Updated Spirit: ${spirit.name}`);
+                    }
+                }
+            },
+            default: "save"
+        }).render(true);
+    }
+
+    async _editSoul(soul) {
+        const content = `
+            <form>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" name="name" value="${soul.name}" required>
+                </div>
+                <div class="form-group">
+                    <label>Class</label>
+                    <input type="text" name="class" value="${soul.attributes?.class || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Level</label>
+                    <input type="number" name="level" value="${soul.attributes?.level || 1}">
+                </div>
+                <div class="form-group">
+                    <label>Backstory / Persona</label>
+                    <textarea name="description" rows="4">${soul.description || ''}</textarea>
+                </div>
+                <hr>
+                <div class="form-group">
+                    <label>Update from JSON</label>
+                    <textarea name="json_import" rows="3" placeholder="Paste JSON here to overwrite..."></textarea>
+                </div>
+            </form>
+        `;
+
+        new Dialog({
+            title: `Edit Soul: ${soul.name}`,
+            content: content,
+            buttons: {
+                save: {
+                    label: "Save Soul",
+                    icon: '<i class="fas fa-save"></i>',
+                    callback: async (html) => {
+                        const form = html.find('form')[0];
+                        const jsonText = form.json_import.value.trim();
+
+                        if (jsonText) {
+                            try {
+                                const json = JSON.parse(jsonText);
+                                const data = this._parseSillyTavernCard(json);
+                                if (data) {
+                                    soul.name = data.name || soul.name;
+                                    soul.description = data.description || soul.description;
+                                    // Class/Level not standard in ST cards, keep existing
+                                    ui.notifications.info("Overwrote fields from JSON.");
+                                }
+                            } catch (e) {
+                                ui.notifications.warn("Invalid JSON pasted. Using form fields.");
+                            }
+                        } else {
+                            soul.name = form.name.value;
+                            soul.attributes.class = form.class.value;
+                            soul.attributes.level = parseInt(form.level.value) || 1;
+                            soul.description = form.description.value;
+                        }
+
+                        await game.settings.set('chronicle-weaver', 'data_souls', game.chronicleWeaver.souls.map(s => s.toJSON()));
+                        this.render();
+                        ui.notifications.info(`Updated Soul: ${soul.name}`);
+                    }
+                }
+            },
+            default: "save"
+        }).render(true);
+    }
+
+    async _editGrimoire(grimoire) {
+        const content = `
+            <form>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" name="name" value="${grimoire.name}" required>
+                </div>
+                <div class="form-group">
+                    <label>JSON Entries (Read-Only/Manual Edit)</label>
+                    <textarea name="entries" rows="10" style="font-family: monospace; font-size: 0.8em;">${JSON.stringify(grimoire.entries, null, 2)}</textarea>
+                    <p class="notes">Format: <code>[{"keys": ["key1"], "content": "text"}]</code></p>
+                </div>
+            </form>
+        `;
+
+        new Dialog({
+            title: `Edit Grimoire: ${grimoire.name}`,
+            content: content,
+            buttons: {
+                save: {
+                    label: "Save Grimoire",
+                    icon: '<i class="fas fa-save"></i>',
+                    callback: async (html) => {
+                        const form = html.find('form')[0];
+                        grimoire.name = form.name.value;
+                        try {
+                            const entries = JSON.parse(form.entries.value);
+                            grimoire.entries = entries;
+                            await game.settings.set('chronicle-weaver', 'data_grimoires', game.chronicleWeaver.grimoires.map(g => g.toJSON()));
+                            this.render();
+                            ui.notifications.info(`Updated Grimoire: ${grimoire.name}`);
+                        } catch (e) {
+                            ui.notifications.error("Invalid JSON for Entries. Changes NOT saved.");
+                            console.error(e);
+                        }
+                    }
+                }
+            },
+            default: "save",
+            width: 600
+        }).render(true);
     }
 
     async _onActiveSpiritChange(event) {
