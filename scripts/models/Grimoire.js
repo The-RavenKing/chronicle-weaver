@@ -1,5 +1,6 @@
 export class Grimoire {
     constructor(data = {}) {
+        this.id = data.id || foundry.utils.randomID();
         this.name = data.name || "New Grimoire";
         this.description = data.description || "";
         this.scan_depth = data.scan_depth || 2;
@@ -55,6 +56,7 @@ export class Grimoire {
 
     toJSON() {
         return {
+            id: this.id,
             name: this.name,
             description: this.description,
             scan_depth: this.scan_depth,

@@ -1,5 +1,6 @@
 export class Spirit {
     constructor(data = {}) {
+        this.id = data.id || foundry.utils.randomID();
         this.name = data.name || "New Spirit";
         this.description = data.description || "";
         this.personality = data.personality || "";

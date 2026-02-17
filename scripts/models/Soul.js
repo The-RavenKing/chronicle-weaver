@@ -1,5 +1,6 @@
 export class Soul {
     constructor(data = {}) {
+        this.id = data.id || foundry.utils.randomID();
         this.name = data.name || "New Soul";
         this.description = data.description || "You are a helpful assistant.";
         this.personality = data.personality || "";
@@ -28,6 +29,7 @@ export class Soul {
 
     toJSON() {
         return {
+            id: this.id,
             name: this.name,
             description: this.description,
             personality: this.personality,

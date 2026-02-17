@@ -14,7 +14,7 @@
             </div>
             <ul class="item-list">
                 {{#each souls}}
-                <li class="item flexrow" data-id="{{this.id}}">
+                <li class="item flexrow" data-id="{{this.id}}" data-type="soul">
                     <div class="item-name">{{this.name}}</div>
                     <div class="item-controls">
                         <a class="item-edit"><i class="fas fa-edit"></i></a>
@@ -35,7 +35,7 @@
             </div>
             <ul class="item-list">
                 {{#each grimoires}}
-                <li class="item flexrow" data-id="{{this.id}}">
+                <li class="item flexrow" data-id="{{this.id}}" data-type="grimoire">
                     <div class="item-name">{{this.name}}</div>
                     <div class="item-controls">
                         <a class="item-edit"><i class="fas fa-edit"></i></a>
@@ -56,7 +56,7 @@
             </div>
             <ul class="item-list">
                 {{#each spirits}}
-                <li class="item flexrow" data-id="{{this.id}}">
+                <li class="item flexrow" data-id="{{this.id}}" data-type="spirit">
                     <div class="item-name">{{this.name}}</div>
                     <div class="item-controls">
                         <a class="item-edit"><i class="fas fa-edit"></i></a>

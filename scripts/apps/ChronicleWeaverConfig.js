@@ -44,15 +44,62 @@ export class ChronicleWeaverConfig extends FormApplication {
         event.preventDefault();
         const header = event.currentTarget;
         const type = header.dataset.type;
-        // Logic to create new Soul/Grimoire/Spirit
-        console.log(`Creating new ${type}`);
+
+        if (type === 'soul') {
+            const newSoul = new game.chronicleWeaver.models.Soul({ name: 'New Soul' });
+            game.chronicleWeaver.souls.push(newSoul);
+            await game.settings.set('chronicle-weaver', 'data_souls',
+                game.chronicleWeaver.souls.map(s => s.toJSON()));
+        }
+
+        if (type === 'grimoire') {
+            const newGrimoire = new game.chronicleWeaver.models.Grimoire({ name: 'New Grimoire' });
+            game.chronicleWeaver.grimoires.push(newGrimoire);
+            await game.settings.set('chronicle-weaver', 'data_grimoires',
+                game.chronicleWeaver.grimoires.map(g => g.toJSON()));
+        }
+
+        if (type === 'spirit') {
+            const newSpirit = new game.chronicleWeaver.models.Spirit({ name: 'New Spirit' });
+            game.chronicleWeaver.spirits.push(newSpirit);
+            await game.settings.set('chronicle-weaver', 'data_spirits',
+                game.chronicleWeaver.spirits.map(s => s.toJSON()));
+        }
+
+        this.render();
     }
 
     async _onItemDelete(event) {
         event.preventDefault();
-        const li = $(event.currentTarget).parents(".item");
-        // Logic to delete item
-        console.log(`Deleting item ${li.data("id")}`);
+        const li = $(event.currentTarget).parents('.item');
+        const id = li.data('id');
+        const type = li.data('type');
+
+        const confirmed = await Dialog.confirm({
+            title: 'Delete Item',
+            content: '<p>Are you sure you want to delete this item?</p>'
+        });
+        if (!confirmed) return;
+
+        if (type === 'soul') {
+            game.chronicleWeaver.souls = game.chronicleWeaver.souls.filter(s => s.id !== id);
+            await game.settings.set('chronicle-weaver', 'data_souls',
+                game.chronicleWeaver.souls.map(s => s.toJSON()));
+        }
+
+        if (type === 'grimoire') {
+            game.chronicleWeaver.grimoires = game.chronicleWeaver.grimoires.filter(g => g.id !== id);
+            await game.settings.set('chronicle-weaver', 'data_grimoires',
+                game.chronicleWeaver.grimoires.map(g => g.toJSON()));
+        }
+
+        if (type === 'spirit') {
+            game.chronicleWeaver.spirits = game.chronicleWeaver.spirits.filter(s => s.id !== id);
+            await game.settings.set('chronicle-weaver', 'data_spirits',
+                game.chronicleWeaver.spirits.map(s => s.toJSON()));
+        }
+
+        this.render();
     }
 
     async _updateObject(event, formData) {
