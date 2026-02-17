@@ -1,0 +1,27 @@
+<div class="chronicle-weaver-review">
+    <header>
+        <h1>Review Learned Lore</h1>
+        <p>Review facts extracted by the AI before adding them to your Grimoire.</p>
+    </header>
+
+    <div class="review-list">
+        {{#each pending as |entry index|}}
+        <div class="review-item" data-id="{{entry.id}}">
+            <div class="review-header">
+                <strong>Keys:</strong>
+                <input type="text" name="keys" value="{{entry.keys}}" />
+            </div>
+            <div class="review-body">
+                <textarea name="content" rows="3">{{entry.content}}</textarea>
+            </div>
+            <div class="review-actions">
+                <button type="button" class="approve" title="Add to Learned Lore Grimoire"><i class="fas fa-check"></i>
+                    Approve</button>
+                <button type="button" class="reject" title="Discard"><i class="fas fa-times"></i> Reject</button>
+            </div>
+        </div>
+        {{else}}
+        <p class="no-pending">No pending entries to review.</p>
+        {{/each}}
+    </div>
+</div>

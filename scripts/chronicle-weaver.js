@@ -38,68 +38,51 @@ Hooks.once('ready', async () => {
         if (userId !== game.user.id) return; // Only process for the user who sent it
         if (!game.settings.get('chronicle-weaver', 'autoWeaving')) return; // Check if active
 
-        // Ignore messages from the AI itself (prevent loops)
         const aiName = "Chronicle Weaver"; // TODO: Get from active Soul
         if (message.speaker.alias === aiName) return;
 
         // Ignore rolls/system messages, only reply to speech/emotes/ooc
         if (![0, 1, 2].includes(message.type)) return;
 
-        // Check if the speaker is a PC
-        const actor = game.actors.get(message.speaker.actor);
-        if (actor && !actor.getFlag('chronicle-weaver', 'isPC')) {
-            // If the speaker IS NOT a PC (i.e., is an NPC), we generally don't want to auto-reply 
-            // because that would mean the AI replying to itself (if it generated the message) 
-            // or the GM roleplaying.
-            // However, for now we will just proceed and let the AI decide if it needs to say something.
-        }
+        // -- CHANGED: REMOVED Scene/Token scanning loop per Issue 5 --
 
-        // Gather Context from Scene
-        const presentSpirits = [];
-        const presentPlayers = [];
-        const presentNPCs = []; // Generic NPCs to be treated as Grimoire/Lore
+        // Gather Context
+        // 1. Spirits (Active Player Characters)
+        // Find all Spirits that are linked to actors owned by active users
+        const activeSpirits = game.chronicleWeaver.spirits.filter(s => {
+            if (!s.foundry_actor_id) return false;
+            const actor = game.actors.get(s.foundry_actor_id);
+            if (!actor) return false;
+            // Check if actor has an active user
+            // Or just allow all spirits that are PCs. Issue 5 says "Active Spirit personas (player characters who are logged in)"
+            // For now, let's include all spirits that we know are PCs.
+            return true;
+        });
 
-        if (canvas.scene) {
-            for (const token of canvas.tokens.placeables) {
-                const tokenActor = token.actor;
-                if (!tokenActor) continue;
+        // 2. Chat History
+        const historyDepth = game.settings.get('chronicle-weaver', 'historyDepth');
+        const history = game.messages.contents
+            .filter(m => [0, 1, 2].includes(m.type) && m.id !== message.id) // Filter valid types, exclude current
+            .slice(-historyDepth) // Get last N
+            .map(m => ({
+                role: m.speaker.alias === aiName ? 'assistant' : 'user',
+                content: `${m.speaker.alias || 'Unknown'}: ${m.content}`
+            }));
 
-                if (tokenActor.getFlag('chronicle-weaver', 'isPC')) {
-                    presentPlayers.push(tokenActor.name);
-                } else {
-                    // It's an NPC. 
-                    // Check if we have an EXPLICIT defined Spirit for it.
-                    let spirit = game.chronicleWeaver.spirits.find(s => s.name === tokenActor.name);
-
-                    if (spirit) {
-                        presentSpirits.push(spirit);
-                    } else {
-                        // No explicit Spirit -> Treat as generic NPC (Grimoire Entry)
-                        presentNPCs.push({
-                            name: tokenActor.name,
-                            description: tokenActor.system?.details?.biography?.value || "A character in the scene."
-                        });
-                    }
-                }
-            }
-        }
-
-        // Send to AI
-        const prompt = message.content;
+        const prompt = `${message.speaker.alias || 'User'}: ${message.content}`;
         console.log("Chronicle Weaver | Auto-responding to:", prompt);
 
         const response = await game.chronicleWeaver.chatService.generateResponse(prompt, {
             soul: game.chronicleWeaver.souls.find(s => s.id === game.settings.get('chronicle-weaver', 'activeSoul')) || new Soul({ name: "GM", description: "You are a Game Master." }),
             grimoires: game.chronicleWeaver.grimoires,
-            spirits: presentSpirits, // Only true Spirits
-            players: presentPlayers,
-            sceneGrimoire: presentNPCs // Generic NPCs as Lore
+            spirits: activeSpirits,
+            history: history
         });
 
         if (response) {
             ChatMessage.create({
                 content: response,
-                speaker: { alias: aiName },
+                speaker: { alias: aiName }, // TODO: Alias should probably be the Soul name
                 type: CONST.CHAT_MESSAGE_TYPES.OTHER
             });
         }
@@ -125,17 +108,74 @@ Hooks.once('ready', async () => {
         if (target.length === 0) target = html.find('.window-title');
 
         if (target.length > 0) {
-            target.parent().after(toggleHTML);
+            const toggle = $(toggleHTML);
+            target.parent().after(toggle);
 
             // Activate listener
-            html.find('.cw-is-pc').change(async (ev) => {
+            toggle.find('.cw-is-pc').change(async (ev) => {
                 const checked = ev.currentTarget.checked;
                 await actor.setFlag('chronicle-weaver', 'isPC', checked);
                 console.log(`Chronicle Weaver | Set ${actor.name} isPC to ${checked}`);
+
+                if (checked) {
+                    // Auto-create/Link Spirit
+                    await SpiritManager.createFromActor(actor);
+                }
             });
         }
     });
+
+    // Hook into actor updates for auto-sync
+    Hooks.on('updateActor', async (actor, changes) => {
+        if (!actor.getFlag('chronicle-weaver', 'isPC')) return;
+        await SpiritManager.syncFromActor(actor);
+    });
 });
+
+// Helper for Spirit Management
+class SpiritManager {
+    static async createFromActor(actor) {
+        // Check if Spirit exists
+        let spirit = game.chronicleWeaver.spirits.find(s => s.foundry_actor_id === actor.id);
+
+        if (!spirit) {
+            // Check by name as fallback
+            spirit = game.chronicleWeaver.spirits.find(s => s.name === actor.name);
+            if (spirit) {
+                // Link it
+                spirit.foundry_actor_id = actor.id;
+            } else {
+                // Create new
+                spirit = new game.chronicleWeaver.models.Spirit();
+                game.chronicleWeaver.spirits.push(spirit);
+            }
+        }
+
+        // Sync data
+        spirit.syncFromActor(actor);
+
+        // Try to set User ID (Owner)
+        const owner = Object.entries(actor.ownership).find(([id, level]) => level === 3 && !game.users.get(id)?.isGM);
+        if (owner) spirit.user_id = owner[0];
+
+        // Save
+        await this.saveSpirits();
+        ui.notifications.info(`Chronicle Weaver: Synced Spirit for ${actor.name}`);
+    }
+
+    static async syncFromActor(actor) {
+        const spirit = game.chronicleWeaver.spirits.find(s => s.foundry_actor_id === actor.id);
+        if (spirit) {
+            spirit.syncFromActor(actor);
+            await this.saveSpirits();
+        }
+    }
+
+    static async saveSpirits() {
+        const data = game.chronicleWeaver.spirits.map(s => s.toJSON());
+        await game.settings.set('chronicle-weaver', 'data_spirits', data);
+    }
+}
 
 function registerSettings() {
     game.settings.register('chronicle-weaver', 'autoWeaving', {
@@ -179,6 +219,23 @@ function registerSettings() {
         config: false,
         type: String,
         default: ''
+    });
+
+    game.settings.register('chronicle-weaver', 'historyDepth', {
+        name: 'Conversation History Depth',
+        hint: 'How many recent messages to include in AI context (default 10)',
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 10,
+        range: { min: 5, max: 30, step: 5 }
+    });
+
+    game.settings.register('chronicle-weaver', 'pending_entries', {
+        scope: 'world',
+        config: false,
+        type: Array,
+        default: []
     });
 
     game.settings.register('chronicle-weaver', 'activeSoul', {
@@ -249,12 +306,6 @@ async function handleChatCommand(message, chatData) {
 
         // 1. Learn from Chat (uses marker now)
         await game.chronicleWeaver.learningService.learnFromChat();
-
-        // 2. Sync PC Souls
-        const pcs = game.actors.filter(a => a.getFlag('chronicle-weaver', 'isPC'));
-        for (const pc of pcs) {
-            await game.chronicleWeaver.learningService.syncSoulFromActor(pc);
-        }
 
         return false;
     }

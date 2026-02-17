@@ -162,60 +162,30 @@ export class LearningService {
     }
 
     updateGrimoire(entries) {
-        let grimoire = game.chronicleWeaver.grimoires.find(g => g.name === "Learned Lore");
-        if (!grimoire) {
-            grimoire = new game.chronicleWeaver.models.Grimoire({ name: "Learned Lore" });
-            game.chronicleWeaver.grimoires.push(grimoire);
-        }
+        const pending = game.settings.get('chronicle-weaver', 'pending_entries') || [];
+        let added = 0;
 
-        let addedCount = 0;
         for (const entry of entries) {
-            // Basic dedup checking
-            const exists = grimoire.entries.some(e => e.keys.some(k => entry.keys.includes(k)));
-            if (!exists) {
-                grimoire.entries.push({
-                    uid: foundry.utils.randomID(),
-                    keys: entry.keys,
-                    content: entry.content,
-                    enabled: true
-                });
-                addedCount++;
-            }
-        }
-
-        if (addedCount > 0) {
-            const allGrimoires = game.chronicleWeaver.grimoires.map(g => g.toJSON());
-            game.settings.set('chronicle-weaver', 'data_grimoires', allGrimoires);
-            ui.notifications.info(`Chronicle Weaver: Learned ${addedCount} new facts!`);
-        } else {
-            ui.notifications.info("Chronicle Weaver: Processing complete. No new lore found.");
-        }
-    }
-
-    async syncSoulFromActor(actor) {
-        // ... (Same as before)
-        const soulName = actor.name;
-        let soul = game.chronicleWeaver.souls.find(s => s.name === soulName);
-
-        const description = `Name: ${actor.name}
-Race: ${actor.system.details?.race || 'Unknown'}
-Class: ${actor.system.details?.class || 'Unknown'}
-Level: ${actor.system.details?.level || 1}
-Background: ${actor.system.details?.background || ''}
-Bio: ${actor.system.details?.biography?.value?.replace(/<[^>]*>?/gm, '') || ''}`;
-
-        if (!soul) {
-            soul = new Soul({
-                name: soulName,
-                description: description,
-                creator: "Auto-Import"
+            // Simple duplicate check against pending + existing Grimoires needed?
+            // For now just push to pending.
+            pending.push({
+                id: foundry.utils.randomID(),
+                keys: entry.keys,
+                content: entry.content,
+                confidence: entry.confidence || null,
+                source: 'learned',
+                timestamp: Date.now(),
+                status: 'pending'
             });
-            game.chronicleWeaver.souls.push(soul);
-        } else {
-            soul.description = description;
+            added++;
         }
 
-        const allSouls = game.chronicleWeaver.souls.map(s => s.toJSON());
-        await game.settings.set('chronicle-weaver', 'data_souls', allSouls);
+        if (added > 0) {
+            game.settings.set('chronicle-weaver', 'pending_entries', pending);
+            ui.notifications.info(`Chronicle Weaver: ${added} entries ready for review`);
+            // Optionally trigger a re-render of the config or badge if open
+        } else {
+            ui.notifications.info("Chronicle Weaver: No new lore found.");
+        }
     }
 }

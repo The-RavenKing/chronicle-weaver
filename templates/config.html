@@ -42,7 +42,7 @@
                         <a class="item-delete"><i class="fas fa-trash"></i></a>
                     </div>
                 </li>
-                 {{else}}
+                {{else}}
                 <li class="item flexrow">No Grimoires defined.</li>
                 {{/each}}
             </ul>
@@ -54,7 +54,7 @@
                 <h3>Spirits (Characters)</h3>
                 <a class="item-create" data-type="spirit"><i class="fas fa-plus"></i> Add Spirit</a>
             </div>
-             <ul class="item-list">
+            <ul class="item-list">
                 {{#each spirits}}
                 <li class="item flexrow" data-id="{{this.id}}">
                     <div class="item-name">{{this.name}}</div>
@@ -63,14 +63,19 @@
                         <a class="item-delete"><i class="fas fa-trash"></i></a>
                     </div>
                 </li>
-                 {{else}}
+                {{else}}
                 <li class="item flexrow">No Spirits defined.</li>
                 {{/each}}
             </ul>
         </div>
     </div>
-    
-    <footer class="sheet-footer">
-        <button type="submit"><i class="fas fa-save"></i> Save Changes</button>
-    </footer>
+
+    <div class="footer flexrow">
+        <button type="submit" name="submit">
+            <i class="fas fa-save"></i> Save Changes
+        </button>
+        <button type="button" class="open-review-queue">
+            <i class="fas fa-inbox"></i> Review Queue {{#if pendingCount}}({{pendingCount}}){{/if}}
+        </button>
+    </div>
 </form>

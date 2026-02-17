@@ -13,119 +13,86 @@ export class ChatService {
      * @param {string} prompt - The prompt to send.
      * @param {Object} context - Additional context (Grimoires, Spirits, etc.).
      * @returns {Promise<string>} - The AI's response.
-     */
-    async generateResponse(prompt, context = {}) {
-        const settings = this._getSettings();
+    }
 
-        // Prepare the request body based on API type (Ollama for now)
-        const requestBody = {
-            model: settings.model,
-            prompt: this._constructFullPrompt(prompt, context, settings),
-            stream: false,
-            options: {
-                temperature: 0.7,
-                // Add validation/other params here
-            }
+    /**
+     * Generates a response from the AI using /api/chat.
+     * @param {string} userPrompt - The user's input.
+     * @param {Object} context - Data for context (soul, grimoires, spirits, history).
+     * @returns {Promise<string>} The AI's response.
+     */
+    async generateResponse(userPrompt, context) {
+        const settings = {
+            url: game.settings.get('chronicle-weaver', 'ollamaUrl'),
+            model: game.settings.get('chronicle-weaver', 'ollamaModel')
         };
 
+        const messages = this._buildMessages(userPrompt, context);
+
         try {
-            const response = await fetch(`${settings.url}/api/generate`, {
+            console.log("Chronicle Weaver | Sending to LLM:", messages);
+            const response = await fetch(`${settings.url}/api/chat`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify({
+                    model: settings.model,
+                    messages: messages,
+                    stream: false,
+                    options: { temperature: 0.8 }
+                })
             });
 
             if (!response.ok) {
-                throw new Error(`AI API Error: ${response.status} ${response.statusText}`);
+                const err = await response.text();
+                throw new Error(err || response.statusText);
             }
 
             const data = await response.json();
-            return data.response;
+            // /api/chat returns 'message' object
+            return data.message?.content || data.response || "No response.";
+
         } catch (error) {
-            console.error("Chronicle Weaver | Chat Generation Error:", error);
-            ui.notifications.error(`Chronicle Weaver: ${error.message}`);
+            console.error("Chronicle Weaver | API Error:", error);
+            ui.notifications.error(`AI Error: ${error.message}`);
             return null;
         }
     }
 
     /**
-     * Constructs the full prompt with context from Grimoires, Souls, etc.
+     * Builds the messages array for /api/chat.
+     * @param {string} userMessage 
+     * @param {Object} context 
+     * @returns {Array} Array of message objects {role, content}
      */
-    _constructFullPrompt(userPrompt, context, settings) {
-        let fullPrompt = "";
+    _buildMessages(userMessage, context) {
+        const messages = [];
+        let systemContent = '';
 
-        // 1. System Prompt / Soul Identity
+        // 1. Soul (GM personality)
         if (context.soul) {
-            fullPrompt += `### Instruction:\n${context.soul.getSystemPrompt()}\n\n`;
+            systemContent += context.soul.getSystemPrompt();
         } else {
-            fullPrompt += `### Instruction:\nYou are a helpful assistant.\n\n`;
+            systemContent += "You are a helpful Game Master.";
         }
 
-        // 2. World Info / Grimoire Entries
-        if (context.grimoires && context.grimoires.length > 0) {
-            const relevantEntries = [];
-            for (const grimoire of context.grimoires) {
-                // Scan user prompt and recent history (mocked history for now)
-                const matches = grimoire.scan(userPrompt);
-                relevantEntries.push(...matches);
-            }
-
-            if (relevantEntries.length > 0) {
-                fullPrompt += `### World Info:\n`;
-                for (const entry of relevantEntries) {
-                    fullPrompt += `${entry.content}\n`;
-                }
-                // Inject Generic NPCs here as temporary lore
-                if (context.sceneGrimoire && context.sceneGrimoire.length > 0) {
-                    for (const npc of context.sceneGrimoire) {
-                        // Strip HTML from bio if needed, for now just dump it
-                        // A simple format: Name: [Name] \n Description: [Desc]
-                        // Or just as a block
-                        fullPrompt += `NPC: ${npc.name}\nDescription: ${npc.description.replace(/<[^>]*>?/gm, '')}\n`;
-                    }
-                }
-                fullPrompt += `\n`;
-            } else if (context.sceneGrimoire && context.sceneGrimoire.length > 0) {
-                // Case where no Grimoire entries matched, but we have NPCs
-                fullPrompt += `### World Info:\n`;
-                for (const npc of context.sceneGrimoire) {
-                    fullPrompt += `NPC: ${npc.name}\nDescription: ${npc.description.replace(/<[^>]*>?/gm, '')}\n`;
-                }
-                fullPrompt += `\n`;
-            }
-        }
-
-        // 3. Spirit (Character) Context
+        // 2. Active Spirit personas (player characters)
+        // Only include spirits that are active (managed by connected users or explicitly passed)
         if (context.spirits && context.spirits.length > 0) {
-            fullPrompt += `### NPCs Present:\n`;
-            for (const spirit of context.spirits) {
-                fullPrompt += `${spirit.getCharBlock()}\n`;
+            systemContent += '\n\n## Player Characters\n';
+            context.spirits.forEach(s => {
+                systemContent += s.getPersonaBlock() + '\n';
+            });
+        }
+
+        // 3. Grimoire entries triggered by recent messages + current message
+        if (context.grimoires && context.grimoires.length > 0) {
+            // Build scan text from history + current
+            // Only use the last few messages for scanning to keep it relevant
+            const historyText = context.history ? context.history.map(h => h.content).join(' ') : '';
+            const scanText = (historyText + ' ' + userMessage).trim();
+
+            const triggered = [];
+            for (const grimoire of context.grimoires) {
             }
-            fullPrompt += `\n`;
-        }
-
-        // 3.5 Players Present
-        if (context.players && context.players.length > 0) {
-            fullPrompt += `### Players Present:\n${context.players.join(', ')}\n\n`;
-        }
-
-        // 4. Chat History (To be implemented fully later)
-        if (context.history) {
-            fullPrompt += `### History:\n${context.history}\n\n`;
-        }
-
-        // 5. Current User Input
-        fullPrompt += `### Input:\n${userPrompt}\n\n### Response:\n`;
-
-        return fullPrompt;
-    }
-
-    _getSettings() {
-        return {
-            url: game.settings.get('chronicle-weaver', 'ollamaUrl'),
-            model: game.settings.get('chronicle-weaver', 'ollamaModel')
-        };
-    }
-}

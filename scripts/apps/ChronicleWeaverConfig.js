@@ -1,22 +1,29 @@
+import { ReviewQueueApp } from './ReviewQueueApp.js';
+
 export class ChronicleWeaverConfig extends FormApplication {
     static get defaultOptions() {
-        return mergeObject(super.defaultOptions, {
+        return foundry.utils.mergeObject(super.defaultOptions, {
             id: "chronicle-weaver-config",
             title: "Chronicle Weaver Configuration",
             template: "modules/chronicle-weaver/templates/config.html",
-            width: 600,
-            height: 700,
+            width: 800,
+            height: 600,
+            resizable: true,
             tabs: [{ navSelector: ".tabs", contentSelector: ".content", initial: "souls" }]
         });
     }
 
     getData() {
-        return {
-            souls: game.chronicleWeaver.souls,
-            grimoires: game.chronicleWeaver.grimoires,
-            spirits: game.chronicleWeaver.spirits,
-            activeSoul: game.settings.get('chronicle-weaver', 'activeSoul')
-        };
+        const data = super.getData();
+        data.souls = game.chronicleWeaver.souls;
+        data.grimoires = game.chronicleWeaver.grimoires;
+        data.spirits = game.chronicleWeaver.spirits;
+        data.activeSoul = game.settings.get('chronicle-weaver', 'activeSoul'); // Preserve existing data
+
+        const pending = game.settings.get('chronicle-weaver', 'pending_entries') || [];
+        data.pendingCount = pending.length;
+
+        return data;
     }
 
     activateListeners(html) {
@@ -25,6 +32,12 @@ export class ChronicleWeaverConfig extends FormApplication {
         // Add listeners for adding/editing/deleting items
         html.find('.item-create').click(this._onItemCreate.bind(this));
         html.find('.item-delete').click(this._onItemDelete.bind(this));
+
+        // Add Button for Review Queue if not present in template yet
+        // Ideally we update the template, but we can also inject behavior if the button exists
+        html.find('.open-review-queue').click((ev) => {
+            new ReviewQueueApp().render(true);
+        });
     }
 
     async _onItemCreate(event) {
