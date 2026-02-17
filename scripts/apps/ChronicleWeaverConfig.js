@@ -9,7 +9,7 @@ export class ChronicleWeaverConfig extends FormApplication {
             width: 800,
             height: 600,
             resizable: true,
-            tabs: [{ navSelector: ".tabs", contentSelector: ".content", initial: "souls" }]
+            tabs: [{ navSelector: ".tabs", contentSelector: ".content", initial: "spirits" }]
         });
     }
 
@@ -89,28 +89,28 @@ export class ChronicleWeaverConfig extends FormApplication {
     }
 
     async _editSpirit(spirit) {
+        const esc = this._esc.bind(this);
         const content = `
             <form>
                 <div class="form-group">
                     <label>Name</label>
-                    <input type="text" name="name" value="${spirit.name}" required>
+                    <input type="text" name="name" value="${esc(spirit.name)}" required>
                 </div>
-                <!-- ... existing fields ... -->
                 <div class="form-group">
                     <label>Description</label>
-                    <textarea name="description" rows="3">${spirit.description}</textarea>
+                    <textarea name="description" rows="3">${esc(spirit.description)}</textarea>
                 </div>
                 <div class="form-group">
                     <label>Personality</label>
-                    <textarea name="personality" rows="3">${spirit.personality}</textarea>
+                    <textarea name="personality" rows="3">${esc(spirit.personality)}</textarea>
                 </div>
                 <div class="form-group">
                     <label>Scenario</label>
-                    <textarea name="scenario" rows="3">${spirit.scenario}</textarea>
+                    <textarea name="scenario" rows="3">${esc(spirit.scenario)}</textarea>
                 </div>
                 <div class="form-group">
                     <label>System Prompt (Override)</label>
-                    <textarea name="system_prompt" rows="3">${spirit.system_prompt}</textarea>
+                    <textarea name="system_prompt" rows="3">${esc(spirit.system_prompt)}</textarea>
                     <p class="notes">Leave empty to use Description + Personality + Scenario.</p>
                 </div>
                 <hr>
@@ -144,7 +144,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                                     spirit.system_prompt = data.system_prompt || spirit.system_prompt;
                                     ui.notifications.info("Overwrote fields from JSON.");
                                 }
-                            } catch (e) {
+                            } catch (err) {
                                 ui.notifications.warn("Invalid JSON pasted. Using form fields.");
                             }
                         } else {
@@ -166,23 +166,24 @@ export class ChronicleWeaverConfig extends FormApplication {
     }
 
     async _editSoul(soul) {
+        const esc = this._esc.bind(this);
         const content = `
             <form>
                 <div class="form-group">
                     <label>Name</label>
-                    <input type="text" name="name" value="${soul.name}" required>
+                    <input type="text" name="name" value="${esc(soul.name)}" required>
                 </div>
                 <div class="form-group">
                     <label>Class</label>
-                    <input type="text" name="class" value="${soul.attributes?.class || ''}">
+                    <input type="text" name="class" value="${esc(soul.attributes?.class)}">
                 </div>
                 <div class="form-group">
                     <label>Level</label>
-                    <input type="number" name="level" value="${soul.attributes?.level || 1}">
+                    <input type="number" name="level" value="${esc(soul.attributes?.level || 1)}">
                 </div>
                 <div class="form-group">
                     <label>Backstory / Persona</label>
-                    <textarea name="description" rows="4">${soul.description || ''}</textarea>
+                    <textarea name="description" rows="4">${esc(soul.description)}</textarea>
                 </div>
                 <hr>
                 <div class="form-group">
@@ -213,7 +214,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                                     // Class/Level not standard in ST cards, keep existing
                                     ui.notifications.info("Overwrote fields from JSON.");
                                 }
-                            } catch (e) {
+                            } catch (err) {
                                 ui.notifications.warn("Invalid JSON pasted. Using form fields.");
                             }
                         } else {
@@ -234,11 +235,12 @@ export class ChronicleWeaverConfig extends FormApplication {
     }
 
     async _editGrimoire(grimoire) {
+        const esc = this._esc.bind(this);
         const content = `
             <form>
                 <div class="form-group">
                     <label>Name</label>
-                    <input type="text" name="name" value="${grimoire.name}" required>
+                    <input type="text" name="name" value="${esc(grimoire.name)}" required>
                 </div>
                 <div class="form-group">
                     <label>JSON Entries (Read-Only/Manual Edit)</label>
@@ -264,9 +266,9 @@ export class ChronicleWeaverConfig extends FormApplication {
                             await game.settings.set('chronicle-weaver', 'data_grimoires', game.chronicleWeaver.grimoires.map(g => g.toJSON()));
                             this.render();
                             ui.notifications.info(`Updated Grimoire: ${grimoire.name}`);
-                        } catch (e) {
+                        } catch (err) {
                             ui.notifications.error("Invalid JSON for Entries. Changes NOT saved.");
-                            console.error(e);
+                            console.error(err);
                         }
                     }
                 }
@@ -314,8 +316,8 @@ export class ChronicleWeaverConfig extends FormApplication {
         }
     }
 
-    async _onRefreshModels(event) {
-        if (event) event.preventDefault();
+    async _onRefreshModels(event = null) {
+        if (event?.type === 'click') event.preventDefault();
         const url = game.settings.get('chronicle-weaver', 'ollamaUrl');
 
         try {
@@ -362,7 +364,7 @@ export class ChronicleWeaverConfig extends FormApplication {
             const soulData = this._parseSillyTavernCard(json); // Souls also use Card format usually or just simplified
             if (soulData) {
                 // Souls are PCs, usually synced with Actors. But if importing manually:
-                soulData.id = foundry.utils.randomID();
+                // id is assigned by Soul constructor if not already present
                 game.chronicleWeaver.souls.push(new game.chronicleWeaver.models.Soul(soulData));
                 await game.settings.set('chronicle-weaver', 'data_souls', game.chronicleWeaver.souls.map(s => s.toJSON()));
                 this.render();
@@ -437,6 +439,11 @@ export class ChronicleWeaverConfig extends FormApplication {
         }
     }
 
+    /** Escapes a value for safe use inside an HTML attribute or text node. */
+    _esc(str) {
+        return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     _parseSillyTavernCard(json) {
         // Handle V1 and V2 specs roughly
         const data = json.data || json; // V2 vs V1
@@ -445,7 +452,8 @@ export class ChronicleWeaverConfig extends FormApplication {
             description: data.description || data.persona || "",
             personality: data.personality || "",
             scenario: data.scenario || "",
-            system_prompt: data.system_prompt || data.first_mes || ""
+            first_message: data.first_mes || "",
+            system_prompt: data.system_prompt || ""
         };
     }
 
@@ -455,10 +463,10 @@ export class ChronicleWeaverConfig extends FormApplication {
         const entries = json.entries || [];
         // Map to our Grimoire Entry format
         const mappedEntries = entries.map(e => ({
-            id: foundry.utils.randomID(),
+            uid: foundry.utils.randomID(),
             keys: e.keys || [],
             content: e.content || "",
-            active: e.enabled !== false
+            enabled: e.enabled !== false
         }));
 
         return {

@@ -4,9 +4,9 @@ export class Soul {
         this.name = data.name || "New Soul";
         this.description = data.description || "";
         this.personality = data.personality || "";
-        this.intro = data.first_message || "";
+        this.intro = data.intro || data.first_message || ""; // support both saved key and ST card key
         this.scenario = data.scenario || "";
-        this.example_dialogue = data.mes_example || "";
+        this.example_dialogue = data.example_dialogue || data.mes_example || ""; // support both saved key and ST card key
         this.background = data.background || "";
 
         // PC specific fields
@@ -14,7 +14,8 @@ export class Soul {
             class: "Unknown",
             subclass: "",
             level: 1,
-            race: "Unknown"
+            race: "Unknown",
+            background: ""
         };
 
         this.stats = data.stats || {
@@ -102,6 +103,9 @@ export class Soul {
             name: this.name,
             description: this.description,
             personality: this.personality,
+            intro: this.intro,
+            scenario: this.scenario,
+            example_dialogue: this.example_dialogue,
             background: this.background,
             attributes: this.attributes,
             stats: this.stats,

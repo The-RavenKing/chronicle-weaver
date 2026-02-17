@@ -1,12 +1,5 @@
-import { Grimoire } from '../models/Grimoire.js';
-import { Soul } from '../models/Soul.js';
-import { Spirit } from '../models/Spirit.js';
-
 export class ChatService {
-    constructor() {
-        this.requestQueue = [];
-        this.isProcessing = false;
-    }
+    constructor() {}
 
     /**
      * Generates a response from the AI using /api/chat.
@@ -16,8 +9,6 @@ export class ChatService {
      */
     async generateResponse(userPrompt, context) {
         // context: { spirit: Spirit (AI), souls: Soul[] (Players), grimoires: Grimoire[], history: [] }
-
-        console.log("Chronicle Weaver | ChatService.generateResponse called with prompt:", userPrompt);
 
         const activeSpirit = context.spirit; // Was activeSoul
         const activeSouls = context.souls || []; // Was activeSpirits
@@ -31,18 +22,12 @@ export class ChatService {
             return null; // Don't return text to avoid "Narrator needs..." showing up as AI response in some flows
         }
 
-        console.log(`Chronicle Weaver | Using Spirit: ${activeSpirit.name}`);
-
         const messages = this._buildMessages(userPrompt, {
             spirit: activeSpirit,
             souls: activeSouls,
             grimoires: context.grimoires,
             history: context.history
         });
-
-        // Log the exact payload to debug context issues
-        console.log(`Chronicle Weaver | Sending request to ${ollamaUrl}/api/chat with model ${model}`);
-        // console.log("Chronicle Weaver | Messages Payload:", JSON.stringify(messages, null, 2));
 
         try {
             const response = await fetch(`${ollamaUrl}/api/chat`, {
@@ -66,8 +51,6 @@ export class ChatService {
             }
 
             const data = await response.json();
-            console.log("Chronicle Weaver | Received response data:", data);
-
             const reply = data.message?.content || data.response;
             if (!reply) {
                 console.warn("Chronicle Weaver | No content in response:", data);
@@ -108,10 +91,11 @@ export class ChatService {
 
         if (triggered.length > 0) {
             systemContent += '\n\n## World Information\n';
-            // Deduplicate entries by ID
-            const uniqueEntries = [...new Map(triggered.map(item => [item.id, item])).values()];
+            // Deduplicate entries by uid (Grimoire entries use uid, not id)
+            const uniqueEntries = [...new Map(triggered.map(item => [item.uid, item])).values()];
             uniqueEntries.forEach(entry => {
-                systemContent += `- ${entry.keys[0]}: ${entry.content}\n`;
+                const label = entry.keys?.length > 0 ? entry.keys[0] : 'Info';
+                systemContent += `- ${label}: ${entry.content}\n`;
             });
         }
 

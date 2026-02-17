@@ -36,7 +36,7 @@ Hooks.once('init', () => {
                 if (!isPC) {
                     ui.notifications.info(`Chronicle Weaver: ${actor.name} marked as PC.`);
                     if (game.chronicleWeaver?.soulManager) {
-                        game.chronicleWeaver.soulManager.updateFromActor(actor);
+                        await game.chronicleWeaver.soulManager.updateFromActor(actor);
                     }
                 } else {
                     ui.notifications.info(`Chronicle Weaver: ${actor.name} un-marked.`);
@@ -70,7 +70,7 @@ Hooks.once('init', () => {
 
             if (!isTarget) return;
 
-            handleHeaderButtons(app, buttons);
+            handleHeaderButtons(app, buttons).catch(err => console.error("Chronicle Weaver | handleHeaderButtons error:", err));
         });
     });
 
@@ -79,6 +79,7 @@ Hooks.once('init', () => {
     // --------------------------------------------------------
     Hooks.on('renderApplication', (app, html, data) => {
         // Fallback for new sheets that don't trigger header buttons hook
+        if (!game.user.isGM) return;
         const actor = app.document || app.object || app.actor;
         if (!actor || !(actor instanceof Actor)) return;
 
@@ -86,7 +87,6 @@ Hooks.once('init', () => {
         // Note: html might be the window OR content depending on app type.
         // We look broadly.
         const appElement = app.element && app.element[0] ? app.element : html;
-        const width = app.position?.width;
 
         // Try to find header window
         const windowHeader = appElement.closest('.window-app')?.find('.window-header');
@@ -100,9 +100,10 @@ Hooks.once('init', () => {
                 const btn = $(`<a class="header-control cw-pc-toggle" title="CW: Toggle PC"><i class="${isPC ? 'fas fa-check-square' : 'far fa-square'}"></i> CW</a>`);
 
                 btn.on('click', async () => {
-                    const newState = !isPC;
+                    // Read current state fresh from actor each click to avoid stale closure
+                    const currentState = actor.getFlag(MODULE_ID, 'isPC') || false;
+                    const newState = !currentState;
                     await actor.setFlag(MODULE_ID, 'isPC', newState);
-                    // Toggle icon manually
                     btn.find('i').attr('class', newState ? 'fas fa-check-square' : 'far fa-square');
 
                     if (newState) {
@@ -135,13 +136,15 @@ Hooks.once('init', () => {
             class: "cw-pc-toggle",
             icon: isPC ? 'fas fa-check-square' : 'far fa-square',
             onclick: async (ev) => {
-                const newState = !isPC;
+                // Read fresh state from actor to avoid stale closure
+                const currentState = actor.getFlag(MODULE_ID, 'isPC') || false;
+                const newState = !currentState;
                 await actor.setFlag(MODULE_ID, 'isPC', newState);
                 app.render(); // Re-render to update icon
                 if (newState) {
                     ui.notifications.info(`Chronicle Weaver: ${actor.name} marked as PC.`);
                     if (game.chronicleWeaver?.soulManager) {
-                        game.chronicleWeaver.soulManager.updateFromActor(actor);
+                        await game.chronicleWeaver.soulManager.updateFromActor(actor);
                     }
                 } else {
                     ui.notifications.info(`Chronicle Weaver: ${actor.name} un-marked.`);
@@ -172,7 +175,8 @@ Hooks.once('ready', async () => {
 
             if (actor.getFlag(MODULE_ID, 'isPC')) {
                 const soulData = {
-                    id: actor.id,
+                    // Preserve existing ID if updating, generate new one only for new entries
+                    id: existingIndex >= 0 ? souls[existingIndex].id : foundry.utils.randomID(),
                     name: actor.name,
                     foundry_actor_id: actor.id,
                     attributes: {
@@ -201,37 +205,20 @@ Hooks.once('ready', async () => {
 
     // Auto-respond to chat messages
     Hooks.on('createChatMessage', async (message, options, userId) => {
-        // High-level debug log to confirm hook is firing at all
-        console.log("Chronicle Weaver | createChatMessage hook fired", { message, options, userId, gameUser: game.user.id });
-
         if (userId !== game.user.id) return;
 
         const autoWeave = game.settings.get(MODULE_ID, 'autoWeave');
-        if (!autoWeave) {
-            console.log("Chronicle Weaver | Auto-weaving disabled in settings.");
-            return;
-        }
+        if (!autoWeave) return;
 
         // Check if message is from AI
-        if (message.getFlag(MODULE_ID, 'isAI')) {
-            // console.log("Chronicle Weaver | Ignoring AI message.");
-            return;
-        }
+        if (message.getFlag(MODULE_ID, 'isAI')) return;
 
-        // Temporarily accept ALL types to see if type check is the issue
-        console.log("Chronicle Weaver | Processing message type:", message.type);
+        // Only respond to IC speech (0), emotes (1), OOC (2) - ignore rolls, system messages etc.
+        if (![0, 1, 2].includes(message.type)) return;
 
         // Setup Context
         const activeSpiritId = game.settings.get(MODULE_ID, 'activeSpirit');
-        console.log("Chronicle Weaver | Active Spirit ID:", activeSpiritId);
-
         const activeSpirit = game.chronicleWeaver.spirits.find(s => s.id === activeSpiritId);
-        if (!activeSpirit) {
-            console.warn("Chronicle Weaver | Active Spirit not found in memory!");
-            // We can proceed to use a default narrator, or let ChatService handle it.
-            // But if we return here, user sees nothing.
-            // Let's NOT return, but let ChatServiceWarn.
-        }
 
         const activeSouls = game.chronicleWeaver.souls.filter(s => {
             if (!s.foundry_actor_id) return false;
@@ -241,7 +228,7 @@ Hooks.once('ready', async () => {
         // Build history
         const historyDepth = game.settings.get(MODULE_ID, 'historyDepth');
         const history = game.messages.contents
-            .filter(m => m.id !== message.id) // Simple filter for now
+            .filter(m => m.id !== message.id && [0, 1, 2].includes(m.type))
             .slice(-historyDepth)
             .map(m => ({
                 role: m.getFlag(MODULE_ID, 'isAI') ? 'assistant' : 'user',
@@ -249,7 +236,6 @@ Hooks.once('ready', async () => {
             }));
 
         const prompt = `${message.speaker.alias || 'User'}: ${message.content}`;
-        console.log("Chronicle Weaver | Triggering ChatService...");
 
         const response = await game.chronicleWeaver.chatService.generateResponse(prompt, {
             spirit: activeSpirit,
@@ -282,7 +268,7 @@ async function loadData() {
     let spiritData = game.settings.get(MODULE_ID, 'data_spirits');
     game.chronicleWeaver.spirits = spiritData.map(d => new Spirit(d));
 
-    // SOULS (PC Personas) - was data_spirits
+    // SOULS (PC Personas) - renamed from 'data_spirits' to 'data_souls' in v2
     let soulData = game.settings.get(MODULE_ID, 'data_souls');
     game.chronicleWeaver.souls = soulData.map(d => new Soul(d));
 
@@ -418,6 +404,9 @@ async function handleChatCommand(chatLog, message, chatData) {
     const msg = message.trim();
 
     if (msg.startsWith('/cw reset')) {
+        await game.settings.set(MODULE_ID, 'lastProcessedMessageId', '');
+        await game.settings.set(MODULE_ID, 'pending_entries', []);
+        ui.notifications.info("Chronicle Weaver: Reset complete. Learning marker and pending entries cleared.");
         return false;
     }
 

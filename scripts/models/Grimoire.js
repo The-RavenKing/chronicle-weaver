@@ -50,8 +50,8 @@ export class Grimoire {
             }
         }
         
-        // Sort by insertion order/priority if needed, for now just custom order
-        return matches.sort((a, b) => a.order - b.order);
+        // Sort by order if set, otherwise preserve insertion order
+        return matches.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     }
 
     toJSON() {

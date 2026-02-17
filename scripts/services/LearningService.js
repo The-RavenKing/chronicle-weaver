@@ -1,6 +1,3 @@
-import { Grimoire } from '../models/Grimoire.js';
-import { Soul } from '../models/Soul.js';
-
 export class LearningService {
     constructor() {
     }
@@ -36,17 +33,14 @@ export class LearningService {
         ui.notifications.info(`Chronicle Weaver: Analyzing ${newMessages.length} new messages...`);
 
         // 2. Chunking Logic (25 messages per chunk, 10 overlap)
+        // Each chunk starts CHUNK_SIZE - OVERLAP messages after the previous one,
+        // so adjacent chunks share OVERLAP messages for continuity.
+        // e.g. chunk 1 = msgs 0-24, chunk 2 = msgs 15-39, chunk 3 = msgs 30-54, ...
         const CHUNK_SIZE = 25;
         const OVERLAP = 10;
         const chunks = [];
 
         for (let i = 0; i < newMessages.length; i += (CHUNK_SIZE - OVERLAP)) {
-            // Note: Use Math.max(0, ...) isn't strictly needed as loop increments, 
-            // but the slice handles it. 
-            // Actually, we just take slice(i, i + CHUNK_SIZE).
-            // But we must advance by (CHUNK_SIZE - OVERLAP) to create the overlap for the NEXT chunk.
-
-            // Example: 0-25. Next need to start at 15. So i increases by 15 (25-10).
             const chunk = newMessages.slice(i, i + CHUNK_SIZE);
             if (chunk.length === 0) break;
             chunks.push(chunk);
@@ -102,6 +96,7 @@ export class LearningService {
                     stream: false
                 })
             });
+            if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
             const data = await response.json();
             return data.response;
         } catch (e) {
@@ -153,7 +148,7 @@ export class LearningService {
             }
 
             if (Array.isArray(entries) && entries.length > 0) {
-                this.updateGrimoire(entries);
+                await this.updateGrimoire(entries);
             }
 
         } catch (e) {
@@ -161,7 +156,7 @@ export class LearningService {
         }
     }
 
-    updateGrimoire(entries) {
+    async updateGrimoire(entries) {
         const pending = game.settings.get('chronicle-weaver', 'pending_entries') || [];
         let added = 0;
 
@@ -181,7 +176,7 @@ export class LearningService {
         }
 
         if (added > 0) {
-            game.settings.set('chronicle-weaver', 'pending_entries', pending);
+            await game.settings.set('chronicle-weaver', 'pending_entries', pending);
             ui.notifications.info(`Chronicle Weaver: ${added} entries ready for review`);
             // Optionally trigger a re-render of the config or badge if open
         } else {

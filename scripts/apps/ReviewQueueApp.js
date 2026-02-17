@@ -26,8 +26,13 @@ export class ReviewQueueApp extends FormApplication {
         html.find('.approve').click(async (ev) => {
             const el = $(ev.currentTarget).closest('.review-item');
             const id = el.data('id');
-            const keys = el.find('input[name="keys"]').val().split(',').map(k => k.trim());
+            const keys = el.find('input[name="keys"]').val().split(',').map(k => k.trim()).filter(k => k.length > 0);
             const content = el.find('textarea[name="content"]').val();
+
+            if (keys.length === 0) {
+                ui.notifications.warn('Chronicle Weaver: Please enter at least one keyword before approving.');
+                return;
+            }
 
             await this._approveEntry(id, keys, content);
         });
