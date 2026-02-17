@@ -9,13 +9,6 @@ export class ChatService {
     }
 
     /**
-     * Sends a chat request to the AI.
-     * @param {string} prompt - The prompt to send.
-     * @param {Object} context - Additional context (Grimoires, Spirits, etc.).
-     * @returns {Promise<string>} - The AI's response.
-    }
-
-    /**
      * Generates a response from the AI using /api/chat.
      * @param {string} userPrompt - The user's input.
      * @param {Object} context - Data for context (soul, grimoires, spirits, history).
@@ -78,7 +71,6 @@ export class ChatService {
         }
 
         // 2. Active Spirit personas (player characters)
-        // Only include spirits that are active (managed by connected users or explicitly passed)
         if (context.spirits && context.spirits.length > 0) {
             systemContent += '\n\n## Player Characters\n';
             context.spirits.forEach(s => {
@@ -86,13 +78,42 @@ export class ChatService {
             });
         }
 
-        // 3. Grimoire entries triggered by recent messages + current message
+        // 3. Grimoire entries triggered by keywords
         if (context.grimoires && context.grimoires.length > 0) {
-            // Build scan text from history + current
-            // Only use the last few messages for scanning to keep it relevant
-            const historyText = context.history ? context.history.map(h => h.content).join(' ') : '';
+            const historyText = context.history
+                ? context.history.map(h => h.content).join(' ')
+                : '';
             const scanText = (historyText + ' ' + userMessage).trim();
 
             const triggered = [];
             for (const grimoire of context.grimoires) {
+                triggered.push(...grimoire.scan(scanText));
             }
+
+            if (triggered.length > 0) {
+                systemContent += '\n\n## World Information\n';
+                triggered.forEach(entry => {
+                    systemContent += entry.content + '\n';
+                });
+            }
+        }
+
+        // Push system message
+        messages.push({ role: 'system', content: systemContent });
+
+        // 4. Conversation history as alternating messages
+        if (context.history && context.history.length > 0) {
+            context.history.forEach(h => {
+                messages.push({
+                    role: h.role,
+                    content: h.content
+                });
+            });
+        }
+
+        // 5. Current user message
+        messages.push({ role: 'user', content: userMessage });
+
+        return messages;
+    }
+}

@@ -65,7 +65,7 @@ Hooks.once('ready', async () => {
             .filter(m => [0, 1, 2].includes(m.type) && m.id !== message.id) // Filter valid types, exclude current
             .slice(-historyDepth) // Get last N
             .map(m => ({
-                role: m.speaker.alias === aiName ? 'assistant' : 'user',
+                role: m.getFlag('chronicle-weaver', 'isAI') ? 'assistant' : 'user',
                 content: `${m.speaker.alias || 'Unknown'}: ${m.content}`
             }));
 
@@ -125,56 +125,86 @@ Hooks.once('ready', async () => {
         }
     });
 
+    // Inject "Is Player Character" checkbox into Actor Sheet
+    Hooks.on('renderActorSheet', (app, html, data) => {
+        // ... (Existing code) ...
+    });
+
     // Hook into actor updates for auto-sync
     Hooks.on('updateActor', async (actor, changes) => {
         if (!actor.getFlag('chronicle-weaver', 'isPC')) return;
         await SpiritManager.syncFromActor(actor);
     });
+
+    // Register Chat Command handler
+    Hooks.on('chatMessage', handleChatCommand);
 });
 
 // Helper for Spirit Management
 class SpiritManager {
     static async createFromActor(actor) {
-        // Check if Spirit exists
-        let spirit = game.chronicleWeaver.spirits.find(s => s.foundry_actor_id === actor.id);
+        // ... (Existing code) ...
+    }
+    // ... (Existing code) ...
+}
 
-        if (!spirit) {
-            // Check by name as fallback
-            spirit = game.chronicleWeaver.spirits.find(s => s.name === actor.name);
-            if (spirit) {
-                // Link it
-                spirit.foundry_actor_id = actor.id;
-            } else {
-                // Create new
-                spirit = new game.chronicleWeaver.models.Spirit();
-                game.chronicleWeaver.spirits.push(spirit);
-            }
-        }
+function registerSettings() {
+    // ... (Existing code) ...
+}
 
-        // Sync data
-        spirit.syncFromActor(actor);
+async function handleChatCommand(message, chatData) {
+    const msg = message.trim();
+    if (msg.startsWith('/cw reset')) {
+        // Implement reset if needed
+        return false;
+    }
+    if (msg.startsWith('/cw learn')) {
+        ui.notifications.info("Chronicle Weaver: Starting learning process...");
+        await game.chronicleWeaver.learningService.learnFromChat();
+        return false;
+    }
+    return true;
+}
+// Check if Spirit exists
+let spirit = game.chronicleWeaver.spirits.find(s => s.foundry_actor_id === actor.id);
 
-        // Try to set User ID (Owner)
-        const owner = Object.entries(actor.ownership).find(([id, level]) => level === 3 && !game.users.get(id)?.isGM);
-        if (owner) spirit.user_id = owner[0];
+if (!spirit) {
+    // Check by name as fallback
+    spirit = game.chronicleWeaver.spirits.find(s => s.name === actor.name);
+    if (spirit) {
+        // Link it
+        spirit.foundry_actor_id = actor.id;
+    } else {
+        // Create new
+        spirit = new game.chronicleWeaver.models.Spirit();
+        game.chronicleWeaver.spirits.push(spirit);
+    }
+}
 
-        // Save
-        await this.saveSpirits();
-        ui.notifications.info(`Chronicle Weaver: Synced Spirit for ${actor.name}`);
+// Sync data
+spirit.syncFromActor(actor);
+
+// Try to set User ID (Owner)
+const owner = Object.entries(actor.ownership).find(([id, level]) => level === 3 && !game.users.get(id)?.isGM);
+if (owner) spirit.user_id = owner[0];
+
+// Save
+await this.saveSpirits();
+ui.notifications.info(`Chronicle Weaver: Synced Spirit for ${actor.name}`);
     }
 
     static async syncFromActor(actor) {
-        const spirit = game.chronicleWeaver.spirits.find(s => s.foundry_actor_id === actor.id);
-        if (spirit) {
-            spirit.syncFromActor(actor);
-            await this.saveSpirits();
-        }
+    const spirit = game.chronicleWeaver.spirits.find(s => s.foundry_actor_id === actor.id);
+    if (spirit) {
+        spirit.syncFromActor(actor);
+        await this.saveSpirits();
     }
+}
 
     static async saveSpirits() {
-        const data = game.chronicleWeaver.spirits.map(s => s.toJSON());
-        await game.settings.set('chronicle-weaver', 'data_spirits', data);
-    }
+    const data = game.chronicleWeaver.spirits.map(s => s.toJSON());
+    await game.settings.set('chronicle-weaver', 'data_spirits', data);
+}
 }
 
 function registerSettings() {

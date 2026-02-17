@@ -13,7 +13,11 @@ export class ReviewQueueApp extends FormApplication {
 
     getData() {
         const pending = game.settings.get('chronicle-weaver', 'pending_entries') || [];
-        return { pending };
+        const formatted = pending.map(e => ({
+            ...e,
+            keysDisplay: Array.isArray(e.keys) ? e.keys.join(', ') : e.keys
+        }));
+        return { pending: formatted };
     }
 
     activateListeners(html) {
