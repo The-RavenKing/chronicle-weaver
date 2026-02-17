@@ -1,81 +1,167 @@
 <form class="chronicle-weaver-config" autocomplete="off">
-    <nav class="tabs" data-group="primary">
-        <a class="item" data-tab="souls"><i class="fas fa-ghost"></i> Souls</a>
-        <a class="item" data-tab="grimoires"><i class="fas fa-book-journal-whills"></i> Grimoires</a>
-        <a class="item" data-tab="spirits"><i class="fas fa-users"></i> Spirits</a>
-    </nav>
+    <header class="sheet-header">
+        <h1>Chronicle Weaver Configuration</h1>
+    </header>
 
-    <div class="content">
-        <!-- Souls Tab -->
-        <div class="tab" data-tab="souls">
-            <div class="header">
-                <h3>Managed Souls (Personas)</h3>
-                <a class="item-create" data-type="soul"><i class="fas fa-plus"></i> Add Soul</a>
-            </div>
-            <ul class="item-list">
-                {{#each souls}}
-                <li class="item flexrow" data-id="{{this.id}}" data-type="soul">
-                    <div class="item-name">{{this.name}}</div>
-                    <div class="item-controls">
-                        <a class="item-edit"><i class="fas fa-edit"></i></a>
-                        <a class="item-delete"><i class="fas fa-trash"></i></a>
-                    </div>
-                </li>
-                {{else}}
-                <li class="item flexrow">No Souls defined.</li>
-                {{/each}}
-            </ul>
+    <div class="form-group">
+        <label>Ollama URL</label>
+        <div class="form-fields">
+            <input type="text" name="ollamaUrl" value="{{ollamaUrl}}" placeholder="http://localhost:11434">
+            <button type="button" id="cw-test-connection" title="Test Connection">
+                <i class="fas fa-plug"></i> Test
+            </button>
         </div>
-
-        <!-- Grimoires Tab -->
-        <div class="tab" data-tab="grimoires">
-            <div class="header">
-                <h3>Grimoires (Lorebooks)</h3>
-                <a class="item-create" data-type="grimoire"><i class="fas fa-plus"></i> Add Grimoire</a>
-            </div>
-            <ul class="item-list">
-                {{#each grimoires}}
-                <li class="item flexrow" data-id="{{this.id}}" data-type="grimoire">
-                    <div class="item-name">{{this.name}}</div>
-                    <div class="item-controls">
-                        <a class="item-edit"><i class="fas fa-edit"></i></a>
-                        <a class="item-delete"><i class="fas fa-trash"></i></a>
-                    </div>
-                </li>
-                {{else}}
-                <li class="item flexrow">No Grimoires defined.</li>
-                {{/each}}
-            </ul>
-        </div>
-
-        <!-- Spirits Tab -->
-        <div class="tab" data-tab="spirits">
-            <div class="header">
-                <h3>Spirits (Characters)</h3>
-                <a class="item-create" data-type="spirit"><i class="fas fa-plus"></i> Add Spirit</a>
-            </div>
-            <ul class="item-list">
-                {{#each spirits}}
-                <li class="item flexrow" data-id="{{this.id}}" data-type="spirit">
-                    <div class="item-name">{{this.name}}</div>
-                    <div class="item-controls">
-                        <a class="item-edit"><i class="fas fa-edit"></i></a>
-                        <a class="item-delete"><i class="fas fa-trash"></i></a>
-                    </div>
-                </li>
-                {{else}}
-                <li class="item flexrow">No Spirits defined.</li>
-                {{/each}}
-            </ul>
-        </div>
+        <p class="notes">Ensure Ollama is running and accessible (e.g. `OLLAMA_ORIGINS="*"`).</p>
     </div>
 
-    <div class="footer flexrow">
+    <div class="form-group">
+        <label>Chat Model (Reader)</label>
+        <div class="form-fields">
+            <select name="ollamaModel">
+                <option value="" {{#unless ollamaModel}}selected{{/unless}}>-- Select Model --</option>
+                {{#each availableModels}}
+                <option value="{{this}}" {{#if (eq this ../ollamaModel)}}selected{{/if}}>{{this}}</option>
+                {{/each}}
+            </select>
+            <button type="button" id="cw-refresh-models" title="Refresh Models">
+                <i class="fas fa-sync"></i>
+            </button>
+        </div>
+        <p class="notes">Used for chat responses and log analysis.</p>
+    </div>
+
+    <div class="form-group">
+        <label>Coder Model</label>
+        <div class="form-fields">
+            <select name="coderModel">
+                <option value="" {{#unless coderModel}}selected{{/unless}}>-- Select Model --</option>
+                {{#each availableModels}}
+                <option value="{{this}}" {{#if (eq this ../coderModel)}}selected{{/if}}>{{this}}</option>
+                {{/each}}
+            </select>
+        </div>
+        <p class="notes">Used for structuring JSON data (recommend `qwen2.5-coder` or similar).</p>
+    </div>
+
+    <hr>
+
+    <nav class="sheet-tabs tabs" data-group="primary">
+        <a class="item" data-tab="spirits"><i class="fas fa-ghost"></i> Spirits (AI Personas)</a>
+        <a class="item" data-tab="souls"><i class="fas fa-users"></i> Souls (Players)</a>
+        <a class="item" data-tab="grimoires"><i class="fas fa-book-journal-whills"></i> Grimoires</a>
+    </nav>
+
+    <section class="content">
+        <!-- SPIRITS TAB (AI Personas) -->
+        <div class="tab" data-tab="spirits">
+            <h2>Spirits of the Weaver (AI Personas)</h2>
+            <p class="notes">These are the personalities the AI can adopt (e.g., The Narrator, A Mysterious Merchant).
+            </p>
+            <div class="tab" data-tab="spirits">
+                <h2>Spirits of the Weaver (AI Personas)</h2>
+                <p class="notes">These are the personalities the AI can adopt (e.g., The Narrator, A Mysterious
+                    Merchant).
+                </p>
+
+                <div class="form-group">
+                    <label>Active Spirit</label>
+                    <div class="form-fields">
+                        <select name="activeSpirit" class="active-spirit-select">
+                            <option value="">-- No Active Spirit --</option>
+                            {{#each spirits}}
+                            <option value="{{this.id}}" {{#if (eq this.id ../activeSpirit)}}selected{{/if}}>
+                                {{this.name}}</option>
+                            {{/each}}
+                        </select>
+                    </div>
+                    <p class="notes">Select which Spirit currently listens to chat and responds.</p>
+                </div>
+                <hr>
+                <div class="action-bar flexrow">
+                    <button type="button" class="item-create" data-type="Spirit"><i class="fas fa-plus"></i> Create New
+                        Spirit</button>
+                    <button type="button" class="import-spirit"><i class="fas fa-file-import"></i> Import JSON
+                        (SillyTavern)</button>
+                    <input type="file" id="import-spirit-file" accept=".json" style="display:none;">
+                </div>
+
+                <ul class="item-list">
+                    {{#each spirits}}
+                    <li class="item flexrow" data-id="{{this.id}}" data-type="Spirit">
+                        <div class="item-name"><strong>{{this.name}}</strong></div>
+                        <div class="item-controls">
+                            <a class="item-delete" title="Delete Spirit"><i class="fas fa-trash"></i></a>
+                        </div>
+                    </li>
+                    {{else}}
+                    <li class="item flexrow">No Spirits defined.</li>
+                    {{/each}}
+                </ul>
+            </div>
+
+            <!-- SOULS TAB (Player Characters) -->
+            <div class="tab" data-tab="souls">
+                <h2>Souls (Player Characters)</h2>
+                <p class="notes">These represent Player Characters. Use the checkbox on Actor Sheets to add them here.
+                </p>
+
+                <div class="action-bar flexrow">
+                    <button type="button" class="import-soul-actor"><i class="fas fa-user-plus"></i> Import from
+                        Actor</button>
+                    <button type="button" class="import-soul"><i class="fas fa-file-import"></i> Import JSON</button>
+                    <input type="file" id="import-soul-file" accept=".json" style="display:none;">
+                </div>
+
+                <ul class="item-list">
+                    {{#each souls}}
+                    <li class="item flexrow" data-id="{{this.id}}" data-type="Soul">
+                        <div class="item-name"><strong>{{this.name}}</strong> ({{this.attributes.class}}
+                            {{this.attributes.level}})</div>
+                        <div class="item-controls">
+                            <a class="item-delete" title="Unlink Soul"><i class="fas fa-trash"></i></a>
+                        </div>
+                    </li>
+                    {{else}}
+                    <li class="item flexrow">No Souls defined.</li>
+                    {{/each}}
+                </ul>
+            </div>
+
+            <!-- GRIMOIRES TAB -->
+            <div class="tab" data-tab="grimoires">
+                <h2>Grimoires (Lorebooks)</h2>
+                <p class="notes">Knowledge bases for the AI.</p>
+
+                <div class="action-bar flexrow">
+                    <button type="button" class="item-create" data-type="Grimoire"><i class="fas fa-plus"></i> Create
+                        New
+                        Grimoire</button>
+                    <button type="button" class="import-grimoire"><i class="fas fa-file-import"></i> Import
+                        JSON</button>
+                    <input type="file" id="import-grimoire-file" accept=".json" style="display:none;">
+                </div>
+
+                <ul class="item-list">
+                    {{#each grimoires}}
+                    <li class="item flexrow" data-id="{{this.id}}" data-type="Grimoire">
+                        <div class="item-name"><strong>{{this.name}}</strong> ({{this.entries.length}} entries)</div>
+                        <div class="item-controls">
+                            <a class="item-delete" title="Delete Grimoire"><i class="fas fa-trash"></i></a>
+                        </div>
+                    </li>
+                    {{else}}
+                    <li class="item flexrow">No Grimoires defined.</li>
+                    {{/each}}
+                </ul>
+            </div>
+    </section>
+
+    <footer class="sheet-footer flexrow">
         <button type="submit" name="submit">
             <i class="fas fa-save"></i> Save Changes
         </button>
         <button type="button" class="open-review-queue">
             <i class="fas fa-inbox"></i> Review Queue {{#if pendingCount}}({{pendingCount}}){{/if}}
         </button>
-    </div>
+    </footer>
 </form>

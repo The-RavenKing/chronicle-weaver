@@ -15,13 +15,21 @@ export class ChronicleWeaverConfig extends FormApplication {
 
     getData() {
         const data = super.getData();
-        data.souls = game.chronicleWeaver.souls;
+        data.spirits = game.chronicleWeaver.spirits; // AI Personas
+        data.souls = game.chronicleWeaver.souls; // PC Personas
         data.grimoires = game.chronicleWeaver.grimoires;
-        data.spirits = game.chronicleWeaver.spirits;
-        data.activeSoul = game.settings.get('chronicle-weaver', 'activeSoul'); // Preserve existing data
 
         const pending = game.settings.get('chronicle-weaver', 'pending_entries') || [];
         data.pendingCount = pending.length;
+
+        data.activeSpirit = game.settings.get('chronicle-weaver', 'activeSpirit'); // Was activeSoul
+        // Settings data
+        data.ollamaUrl = game.settings.get('chronicle-weaver', 'ollamaUrl');
+        data.ollamaModel = game.settings.get('chronicle-weaver', 'ollamaModel');
+        data.coderModel = game.settings.get('chronicle-weaver', 'coderModel');
+
+        // Available models
+        data.availableModels = game.settings.get('chronicle-weaver', 'ollamaContextModels') || [];
 
         return data;
     }
@@ -29,15 +37,226 @@ export class ChronicleWeaverConfig extends FormApplication {
     activateListeners(html) {
         super.activateListeners(html);
 
-        // Add listeners for adding/editing/deleting items
+        // Existing listeners
         html.find('.item-create').click(this._onItemCreate.bind(this));
         html.find('.item-delete').click(this._onItemDelete.bind(this));
-
-        // Add Button for Review Queue if not present in template yet
-        // Ideally we update the template, but we can also inject behavior if the button exists
         html.find('.open-review-queue').click((ev) => {
             new ReviewQueueApp().render(true);
         });
+
+        // New listeners
+        html.find('#cw-test-connection').click(this._onTestConnection.bind(this));
+        html.find('#cw-refresh-models').click(this._onRefreshModels.bind(this));
+        html.find('select[name="ollamaModel"]').change(this._onSettingChange.bind(this));
+        html.find('select[name="coderModel"]').change(this._onSettingChange.bind(this));
+        html.find('input[name="ollamaUrl"]').change(this._onSettingChange.bind(this));
+
+        // Import Buttons
+        html.find('.import-spirit').click(ev => html.find('#import-spirit-file').click());
+        html.find('#import-spirit-file').change(ev => this._onImportSpirit(ev));
+
+        html.find('.import-soul').click(ev => html.find('#import-soul-file').click());
+        html.find('#import-soul-file').change(ev => this._onImportSoul(ev));
+
+        html.find('.import-grimoire').click(ev => html.find('#import-grimoire-file').click());
+        html.find('#import-grimoire-file').change(ev => this._onImportGrimoire(ev));
+
+        // Import Soul from Actor (Fallback)
+        html.find('.import-soul-actor').click(this._onImportSoulFromActor.bind(this));
+        // Active Spirit
+        html.find('.active-spirit-select').change(this._onActiveSpiritChange.bind(this));
+    }
+
+    async _onActiveSpiritChange(event) {
+        const id = event.target.value;
+        await game.settings.set('chronicle-weaver', 'activeSpirit', id);
+        ui.notifications.info("Chronicle Weaver: Active Spirit Updated");
+    }
+
+    async _onSettingChange(event) {
+        const field = event.currentTarget;
+        const key = field.name;
+        const value = field.value;
+        await game.settings.set('chronicle-weaver', key, value);
+        // Don't re-render entire app on input change to avoid losing focus, unless needed
+    }
+
+    async _onTestConnection(event) {
+        event.preventDefault();
+        const url = game.settings.get('chronicle-weaver', 'ollamaUrl');
+        const btn = $(event.currentTarget);
+        const icon = btn.find('i');
+
+        icon.attr('class', 'fas fa-spinner fa-spin');
+
+        try {
+            const response = await fetch(`${url}/api/version`); // Simple ping
+            if (response.ok) {
+                ui.notifications.info(`Chronicle Weaver: Connected to Ollama successfully!`);
+                // Auto-refresh models on success
+                await this._onRefreshModels(event);
+            } else {
+                throw new Error(response.statusText);
+            }
+        } catch (error) {
+            ui.notifications.error(`Chronicle Weaver: Connection failed. ${error.message}`);
+        } finally {
+            icon.attr('class', 'fas fa-plug');
+        }
+    }
+
+    async _onRefreshModels(event) {
+        if (event) event.preventDefault();
+        const url = game.settings.get('chronicle-weaver', 'ollamaUrl');
+
+        try {
+            const response = await fetch(`${url}/api/tags`);
+            if (!response.ok) throw new Error("Failed to fetch models");
+
+            const data = await response.json();
+            const models = data.models.map(m => m.name);
+
+            await game.settings.set('chronicle-weaver', 'ollamaContextModels', models);
+            ui.notifications.info(`Chronicle Weaver: Found ${models.length} models.`);
+            this.render(); // Re-render to populate dropdowns
+
+        } catch (error) {
+            ui.notifications.error(`Chronicle Weaver: Could not fetch models. ${error.message}`);
+        }
+    }
+
+    async _onImportSpirit(ev) {
+        const file = ev.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        try {
+            const json = JSON.parse(text);
+            const spiritData = this._parseSillyTavernCard(json);
+            if (spiritData) {
+                game.chronicleWeaver.spirits.push(new game.chronicleWeaver.models.Spirit(spiritData));
+                await game.settings.set('chronicle-weaver', 'data_spirits', game.chronicleWeaver.spirits.map(s => s.toJSON()));
+                this.render();
+                ui.notifications.info(`Imported Spirit: ${spiritData.name}`);
+            }
+        } catch (err) {
+            console.error(err);
+            ui.notifications.error("Failed to import Spirit: Invalid JSON.");
+        }
+    }
+
+    async _onImportSoul(ev) {
+        const file = ev.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        try {
+            const json = JSON.parse(text);
+            const soulData = this._parseSillyTavernCard(json); // Souls also use Card format usually or just simplified
+            if (soulData) {
+                // Souls are PCs, usually synced with Actors. But if importing manually:
+                soulData.id = foundry.utils.randomID();
+                game.chronicleWeaver.souls.push(new game.chronicleWeaver.models.Soul(soulData));
+                await game.settings.set('chronicle-weaver', 'data_souls', game.chronicleWeaver.souls.map(s => s.toJSON()));
+                this.render();
+                ui.notifications.info(`Imported Soul: ${soulData.name}`);
+            }
+        } catch (err) {
+            console.error(err);
+            ui.notifications.error("Failed to import Soul: Invalid JSON.");
+        }
+    }
+
+    async _onImportSoulFromActor(ev) {
+        ev.preventDefault();
+
+        // Simple dialog to select an actor
+        const actors = game.actors.contents.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+
+        new Dialog({
+            title: "Import Soul from Actor",
+            content: `
+                <form>
+                    <div class="form-group">
+                        <label>Select Actor:</label>
+                        <select id="actor-select" style="width: 100%;">${actors}</select>
+                    </div>
+                </form>
+            `,
+            buttons: {
+                import: {
+                    label: "Import",
+                    callback: async (html) => {
+                        const actorId = html.find('#actor-select').val();
+                        const actor = game.actors.get(actorId);
+                        if (!actor) return;
+
+                        // Set the flag on the actor so it syncs in the future
+                        await actor.setFlag('chronicle-weaver', 'isPC', true);
+
+                        // Manually trigger sync just in case
+                        if (game.chronicleWeaver?.soulManager) {
+                            await game.chronicleWeaver.soulManager.updateFromActor(actor);
+                        }
+
+                        ui.notifications.info(`Imported/Linked Soul: ${actor.name}`);
+                        this.render();
+                    }
+                },
+                cancel: {
+                    label: "Cancel"
+                }
+            },
+            default: "import"
+        }).render(true);
+    }
+
+    async _onImportGrimoire(ev) {
+        const file = ev.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        try {
+            const json = JSON.parse(text);
+            const grimoireData = this._parseSillyTavernLorebook(json);
+            if (grimoireData) {
+                game.chronicleWeaver.grimoires.push(new game.chronicleWeaver.models.Grimoire(grimoireData));
+                await game.settings.set('chronicle-weaver', 'data_grimoires', game.chronicleWeaver.grimoires.map(g => g.toJSON()));
+                this.render();
+                ui.notifications.info(`Imported Grimoire: ${grimoireData.name}`);
+            }
+        } catch (err) {
+            console.error(err);
+            ui.notifications.error("Failed to import Grimoire: Invalid JSON.");
+        }
+    }
+
+    _parseSillyTavernCard(json) {
+        // Handle V1 and V2 specs roughly
+        const data = json.data || json; // V2 vs V1
+        return {
+            name: data.name || "Unknown",
+            description: data.description || data.persona || "",
+            personality: data.personality || "",
+            scenario: data.scenario || "",
+            system_prompt: data.system_prompt || data.first_mes || ""
+        };
+    }
+
+    _parseSillyTavernLorebook(json) {
+        // SillyTavern Lorebook JSON
+        // Structure: { entries: [ { keys: [], content: "", ... } ], ... }
+        const entries = json.entries || [];
+        // Map to our Grimoire Entry format
+        const mappedEntries = entries.map(e => ({
+            id: foundry.utils.randomID(),
+            keys: e.keys || [],
+            content: e.content || "",
+            active: e.enabled !== false
+        }));
+
+        return {
+            id: foundry.utils.randomID(),
+            name: json.name || "Imported Lorebook",
+            entries: mappedEntries
+        };
     }
 
     async _onItemCreate(event) {

@@ -1,6 +1,6 @@
-import { Grimoire } from './models/Grimoire.js';
-import { Soul } from './models/Soul.js';
-import { Spirit } from './models/Spirit.js';
+import { Grimoire } from '../models/Grimoire.js';
+import { Soul } from '../models/Soul.js';
+import { Spirit } from '../models/Spirit.js';
 
 export class ChatService {
     constructor() {
@@ -15,40 +15,69 @@ export class ChatService {
      * @returns {Promise<string>} The AI's response.
      */
     async generateResponse(userPrompt, context) {
-        const settings = {
-            url: game.settings.get('chronicle-weaver', 'ollamaUrl'),
-            model: game.settings.get('chronicle-weaver', 'ollamaModel')
-        };
+        // context: { spirit: Spirit (AI), souls: Soul[] (Players), grimoires: Grimoire[], history: [] }
 
-        const messages = this._buildMessages(userPrompt, context);
+        console.log("Chronicle Weaver | ChatService.generateResponse called with prompt:", userPrompt);
+
+        const activeSpirit = context.spirit; // Was activeSoul
+        const activeSouls = context.souls || []; // Was activeSpirits
+
+        const ollamaUrl = game.settings.get('chronicle-weaver', 'ollamaUrl');
+        const model = game.settings.get('chronicle-weaver', 'ollamaModel');
+
+        if (!activeSpirit) {
+            console.error("Chronicle Weaver | No Active Spirit found!");
+            ui.notifications.warn("Chronicle Weaver: No Active Spirit selected. Please select one in Module Settings.");
+            return null; // Don't return text to avoid "Narrator needs..." showing up as AI response in some flows
+        }
+
+        console.log(`Chronicle Weaver | Using Spirit: ${activeSpirit.name}`);
+
+        const messages = this._buildMessages(userPrompt, {
+            spirit: activeSpirit,
+            souls: activeSouls,
+            grimoires: context.grimoires,
+            history: context.history
+        });
+
+        // Log the exact payload to debug context issues
+        console.log(`Chronicle Weaver | Sending request to ${ollamaUrl}/api/chat with model ${model}`);
+        // console.log("Chronicle Weaver | Messages Payload:", JSON.stringify(messages, null, 2));
 
         try {
-            console.log("Chronicle Weaver | Sending to LLM:", messages);
-            const response = await fetch(`${settings.url}/api/chat`, {
+            const response = await fetch(`${ollamaUrl}/api/chat`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: settings.model,
+                    model: model,
                     messages: messages,
                     stream: false,
-                    options: { temperature: 0.8 }
+                    options: {
+                        temperature: 0.7
+                    }
                 })
             });
 
             if (!response.ok) {
-                const err = await response.text();
-                throw new Error(err || response.statusText);
+                console.error(`Chronicle Weaver | API Error: ${response.status} ${response.statusText}`);
+                const errorText = await response.text();
+                // console.error(`Chronicle Weaver | Error Body:`, errorText);
+                throw new Error(`Ollama API Error: ${response.status} - ${errorText}`);
             }
 
             const data = await response.json();
-            // /api/chat returns 'message' object
-            return data.message?.content || data.response || "No response.";
+            console.log("Chronicle Weaver | Received response data:", data);
+
+            const reply = data.message?.content || data.response;
+            if (!reply) {
+                console.warn("Chronicle Weaver | No content in response:", data);
+                return "AI returned empty response.";
+            }
+            return reply;
 
         } catch (error) {
-            console.error("Chronicle Weaver | API Error:", error);
-            ui.notifications.error(`AI Error: ${error.message}`);
+            console.error("Chronicle Weaver | Generation Error:", error);
+            ui.notifications.error(`Chronicle Weaver Error: ${error.message}`);
             return null;
         }
     }
@@ -61,54 +90,45 @@ export class ChatService {
      */
     _buildMessages(userMessage, context) {
         const messages = [];
-        let systemContent = '';
+        const { spirit, souls, grimoires, history } = context;
 
-        // 1. Soul (GM personality)
-        if (context.soul) {
-            systemContent += context.soul.getSystemPrompt();
-        } else {
-            systemContent += "You are a helpful Game Master.";
+        // 1. System Prompt (from Spirit/AI)
+        let systemContent = spirit ? spirit.getSystemPrompt() : "You are a Game Master.";
+
+        // 2. Add World Info (Grimoires) - Scanning
+        const historyText = history ? history.map(h => h.content).join(' ') : '';
+        const scanText = (historyText + ' ' + userMessage).trim();
+        const triggered = [];
+
+        if (grimoires && grimoires.length > 0) {
+            for (const grimoire of grimoires) {
+                triggered.push(...grimoire.scan(scanText));
+            }
         }
 
-        // 2. Active Spirit personas (player characters)
-        if (context.spirits && context.spirits.length > 0) {
-            systemContent += '\n\n## Player Characters\n';
-            context.spirits.forEach(s => {
-                systemContent += s.getPersonaBlock() + '\n';
+        if (triggered.length > 0) {
+            systemContent += '\n\n## World Information\n';
+            // Deduplicate entries by ID
+            const uniqueEntries = [...new Map(triggered.map(item => [item.id, item])).values()];
+            uniqueEntries.forEach(entry => {
+                systemContent += `- ${entry.keys[0]}: ${entry.content}\n`;
             });
         }
 
-        // 3. Grimoire entries triggered by keywords
-        if (context.grimoires && context.grimoires.length > 0) {
-            const historyText = context.history
-                ? context.history.map(h => h.content).join(' ')
-                : '';
-            const scanText = (historyText + ' ' + userMessage).trim();
-
-            const triggered = [];
-            for (const grimoire of context.grimoires) {
-                triggered.push(...grimoire.scan(scanText));
-            }
-
-            if (triggered.length > 0) {
-                systemContent += '\n\n## World Information\n';
-                triggered.forEach(entry => {
-                    systemContent += entry.content + '\n';
-                });
-            }
+        // 3. Add Player Personas (Souls)
+        if (souls && souls.length > 0) {
+            systemContent += "\n\n## Player Characters in Scene\n";
+            souls.forEach(s => {
+                systemContent += s.getPersonaBlock() + "\n";
+            });
         }
 
         // Push system message
         messages.push({ role: 'system', content: systemContent });
 
-        // 4. Conversation history as alternating messages
-        if (context.history && context.history.length > 0) {
-            context.history.forEach(h => {
-                messages.push({
-                    role: h.role,
-                    content: h.content
-                });
-            });
+        // 4. Conversation History
+        if (history && history.length > 0) {
+            history.forEach(msg => messages.push(msg));
         }
 
         // 5. Current user message
