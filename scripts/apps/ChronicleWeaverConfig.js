@@ -78,13 +78,13 @@ export class ChronicleWeaverConfig extends FormApplication {
 
         if (type === 'spirit') {
             const spirit = game.chronicleWeaver.spirits.find(s => s.id === id);
-            if (spirit) this._editSpirit(spirit);
+            if (spirit) await this._editSpirit(spirit);
         } else if (type === 'soul') {
             const soul = game.chronicleWeaver.souls.find(s => s.id === id);
-            if (soul) this._editSoul(soul);
+            if (soul) await this._editSoul(soul);
         } else if (type === 'grimoire') {
             const grimoire = game.chronicleWeaver.grimoires.find(g => g.id === id);
-            if (grimoire) this._editGrimoire(grimoire);
+            if (grimoire) await this._editGrimoire(grimoire);
         }
     }
 
@@ -142,6 +142,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                                     spirit.personality = data.personality || spirit.personality;
                                     spirit.scenario = data.scenario || spirit.scenario;
                                     spirit.system_prompt = data.system_prompt || spirit.system_prompt;
+                                    spirit.first_message = data.first_message || spirit.first_message;
                                     ui.notifications.info("Overwrote fields from JSON.");
                                 }
                             } catch (err) {
@@ -245,7 +246,7 @@ export class ChronicleWeaverConfig extends FormApplication {
                 <div class="form-group">
                     <label>JSON Entries (Read-Only/Manual Edit)</label>
                     <textarea name="entries" rows="10" style="font-family: monospace; font-size: 0.8em;">${JSON.stringify(grimoire.entries, null, 2)}</textarea>
-                    <p class="notes">Format: <code>[{"keys": ["key1"], "content": "text"}]</code></p>
+                    <p class="notes">Format: <code>[{"uid": "unique-id", "keys": ["key1"], "content": "text", "enabled": true}]</code>. The uid field must be unique per entry.</p>
                 </div>
             </form>
         `;
@@ -261,8 +262,13 @@ export class ChronicleWeaverConfig extends FormApplication {
                         const form = html.find('form')[0];
                         grimoire.name = form.name.value;
                         try {
-                            const entries = JSON.parse(form.entries.value);
-                            grimoire.entries = entries;
+                            const parsed = JSON.parse(form.entries.value);
+                            // Normalise: ensure every entry has uid and enabled
+                            grimoire.entries = parsed.map(e => ({
+                                ...e,
+                                uid: e.uid || foundry.utils.randomID(),
+                                enabled: e.enabled !== false
+                            }));
                             await game.settings.set('chronicle-weaver', 'data_grimoires', game.chronicleWeaver.grimoires.map(g => g.toJSON()));
                             this.render();
                             ui.notifications.info(`Updated Grimoire: ${grimoire.name}`);
@@ -460,9 +466,12 @@ export class ChronicleWeaverConfig extends FormApplication {
     _parseSillyTavernLorebook(json) {
         // SillyTavern Lorebook JSON
         // Structure: { entries: [ { keys: [], content: "", ... } ], ... }
-        const entries = json.entries || [];
+        const rawEntries = json.entries || [];
+        // SillyTavern stores entries as either an array or a keyed object — normalise to array
+        const entriesArray = Array.isArray(rawEntries) ? rawEntries : Object.values(rawEntries);
+
         // Map to our Grimoire Entry format
-        const mappedEntries = entries.map(e => ({
+        const mappedEntries = entriesArray.map(e => ({
             uid: foundry.utils.randomID(),
             keys: e.keys || [],
             content: e.content || "",

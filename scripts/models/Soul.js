@@ -74,6 +74,7 @@ export class Soul {
         }
 
         this.attributes.background = sys.details?.background?.name || sys.details?.background || "";
+        this.background = this.attributes.background;
 
         // Bio
         if (!this.description) this.description = sys.details?.biography?.value?.replace(/<[^>]*>?/gm, '') || "";

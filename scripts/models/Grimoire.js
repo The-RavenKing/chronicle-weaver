@@ -22,6 +22,7 @@ export class Grimoire {
 
         for (const entry of this.entries) {
             if (!entry.enabled) continue;
+            if (!Array.isArray(entry.keys) || entry.keys.length === 0) continue;
 
             // Check keys (primary keywords)
             let matched = false;
@@ -33,7 +34,7 @@ export class Grimoire {
             }
 
             // Check secondary keys if primary matched (or if no secondary keys exist)
-            if (matched && entry.secondary_keys && entry.secondary_keys.length > 0) {
+            if (matched && Array.isArray(entry.secondary_keys) && entry.secondary_keys.length > 0) {
                 let secondaryMatched = false;
                 for (const key of entry.secondary_keys) {
                     if (lowerText.includes(key.toLowerCase())) {
@@ -49,7 +50,7 @@ export class Grimoire {
                 seenEntries.add(entry.uid);
             }
         }
-        
+
         // Sort by order if set, otherwise preserve insertion order
         return matches.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     }

@@ -40,6 +40,9 @@ Hooks.once('init', () => {
                     }
                 } else {
                     ui.notifications.info(`Chronicle Weaver: ${actor.name} un-marked.`);
+                    if (game.chronicleWeaver?.soulManager) {
+                        await game.chronicleWeaver.soulManager.updateFromActor(actor);
+                    }
                 }
             }
         });
@@ -109,10 +112,13 @@ Hooks.once('init', () => {
                     if (newState) {
                         ui.notifications.info(`Chronicle Weaver: ${actor.name} marked as PC.`);
                         if (game.chronicleWeaver?.soulManager) {
-                            game.chronicleWeaver.soulManager.updateFromActor(actor);
+                            await game.chronicleWeaver.soulManager.updateFromActor(actor);
                         }
                     } else {
                         ui.notifications.info(`Chronicle Weaver: ${actor.name} un-marked.`);
+                        if (game.chronicleWeaver?.soulManager) {
+                            await game.chronicleWeaver.soulManager.updateFromActor(actor);
+                        }
                     }
                 });
 
@@ -148,6 +154,9 @@ Hooks.once('init', () => {
                     }
                 } else {
                     ui.notifications.info(`Chronicle Weaver: ${actor.name} un-marked.`);
+                    if (game.chronicleWeaver?.soulManager) {
+                        await game.chronicleWeaver.soulManager.updateFromActor(actor);
+                    }
                 }
             }
         });
@@ -174,21 +183,18 @@ Hooks.once('ready', async () => {
             const existingIndex = souls.findIndex(s => s.foundry_actor_id === actor.id);
 
             if (actor.getFlag(MODULE_ID, 'isPC')) {
-                const soulData = {
-                    // Preserve existing ID if updating, generate new one only for new entries
-                    id: existingIndex >= 0 ? souls[existingIndex].id : foundry.utils.randomID(),
-                    name: actor.name,
-                    foundry_actor_id: actor.id,
-                    attributes: {
-                        class: actor.items.find(i => i.type === 'class')?.name || "Unknown",
-                        level: actor.system.details?.level || 1,
-                    }
-                };
+                let soul;
+                // Preserve existing ID if updating, generate new one only for new entries
                 if (existingIndex >= 0) {
-                    souls[existingIndex] = new Soul(soulData);
+                    soul = souls[existingIndex];
                 } else {
-                    souls.push(new Soul(soulData));
+                    soul = new Soul({ id: foundry.utils.randomID(), foundry_actor_id: actor.id });
+                    souls.push(soul);
                 }
+
+                // Use the full sync method to populate all fields
+                soul.syncFromActor(actor);
+
                 // Save
                 await game.settings.set(MODULE_ID, 'data_souls', souls.map(s => s.toJSON()));
             } else {
@@ -246,14 +252,19 @@ Hooks.once('ready', async () => {
 
         if (response) {
             const aiName = activeSpirit ? activeSpirit.name : "Narrator";
-            await ChatMessage.create({
-                content: response,
-                speaker: { alias: aiName },
-                type: 0, // CONST.CHAT_MESSAGE_TYPES.OTHER
-                flags: {
-                    [MODULE_ID]: { isAI: true }
-                }
-            });
+            try {
+                await ChatMessage.create({
+                    content: response,
+                    speaker: { alias: aiName },
+                    type: 0, // CONST.CHAT_MESSAGE_TYPES.OTHER
+                    flags: {
+                        [MODULE_ID]: { isAI: true }
+                    }
+                });
+            } catch (err) {
+                console.error("Chronicle Weaver | Failed to post AI message:", err);
+                ui.notifications.error("Chronicle Weaver: Failed to post AI response to chat.");
+            }
         }
     });
 
@@ -400,19 +411,26 @@ function registerSettings() {
     });
 }
 
-async function handleChatCommand(chatLog, message, chatData) {
+function handleChatCommand(chatLog, message, chatData) {
     const msg = message.trim();
 
     if (msg.startsWith('/cw reset')) {
-        await game.settings.set(MODULE_ID, 'lastProcessedMessageId', '');
-        await game.settings.set(MODULE_ID, 'pending_entries', []);
-        ui.notifications.info("Chronicle Weaver: Reset complete. Learning marker and pending entries cleared.");
+        game.settings.set(MODULE_ID, 'lastProcessedMessageId', '')
+            .then(() => game.settings.set(MODULE_ID, 'pending_entries', []))
+            .then(() => ui.notifications.info("Chronicle Weaver: Reset complete. Learning marker and pending entries cleared."))
+            .catch(err => {
+                console.error("Chronicle Weaver | Reset failed:", err);
+                ui.notifications.error("Chronicle Weaver: Reset failed. Please try again.");
+            });
         return false;
     }
 
     if (msg.startsWith('/cw learn')) {
+        // Trigger learning manually
         ui.notifications.info("Chronicle Weaver: Starting learning process...");
-        await game.chronicleWeaver.learningService.learnFromChat();
+        if (game.chronicleWeaver.learningService) {
+            game.chronicleWeaver.learningService.learnFromChat();
+        }
         return false;
     }
 

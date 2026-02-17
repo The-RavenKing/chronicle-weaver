@@ -1,5 +1,5 @@
 export class ChatService {
-    constructor() {}
+    constructor() { }
 
     /**
      * Generates a response from the AI using /api/chat.
@@ -109,6 +109,11 @@ export class ChatService {
 
         // Push system message
         messages.push({ role: 'system', content: systemContent });
+
+        // Inject Spirit's opening message if present and this is the start of a conversation
+        if (spirit?.first_message && (!history || history.length === 0)) {
+            messages.push({ role: 'assistant', content: spirit.first_message });
+        }
 
         // 4. Conversation History
         if (history && history.length > 0) {

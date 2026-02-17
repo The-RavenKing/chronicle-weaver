@@ -45,33 +45,43 @@ export class ReviewQueueApp extends FormApplication {
     }
 
     async _approveEntry(id, keys, content) {
-        // 1. Add to Grimoire
-        let grimoire = game.chronicleWeaver.grimoires.find(g => g.name === "Learned Lore");
-        if (!grimoire) {
-            grimoire = new game.chronicleWeaver.models.Grimoire({ name: "Learned Lore" });
-            game.chronicleWeaver.grimoires.push(grimoire);
+        try {
+            // 1. Add to Grimoire
+            let grimoire = game.chronicleWeaver.grimoires.find(g => g.name === "Learned Lore");
+            if (!grimoire) {
+                grimoire = new game.chronicleWeaver.models.Grimoire({ name: "Learned Lore" });
+                game.chronicleWeaver.grimoires.push(grimoire);
+            }
+
+            grimoire.entries.push({
+                uid: foundry.utils.randomID(), // Ensure ID consistency
+                keys: keys,
+                content: content,
+                enabled: true
+            });
+
+            // Save Grimoires — must succeed before removing from pending
+            const allGrimoires = game.chronicleWeaver.grimoires.map(g => g.toJSON());
+            await game.settings.set('chronicle-weaver', 'data_grimoires', allGrimoires);
+
+            // 2. Only remove from pending once grimoire save is confirmed
+            await this._removeFromPending(id);
+
+            ui.notifications.info("Chronicle Weaver: Entry approved and added to Grimoire.");
+        } catch (err) {
+            console.error("Chronicle Weaver | Failed to approve entry:", err);
+            ui.notifications.error("Chronicle Weaver: Failed to save entry. Please try again.");
         }
-
-        grimoire.entries.push({
-            uid: foundry.utils.randomID(),
-            keys: keys,
-            content: content,
-            enabled: true
-        });
-
-        // Save Grimoires
-        const allGrimoires = game.chronicleWeaver.grimoires.map(g => g.toJSON());
-        await game.settings.set('chronicle-weaver', 'data_grimoires', allGrimoires);
-
-        // 2. Remove from Pending
-        await this._removeFromPending(id);
-
-        ui.notifications.info("Chronicle Weaver: Entry approved and added to Grimoire.");
     }
 
     async _rejectEntry(id) {
-        await this._removeFromPending(id);
-        ui.notifications.info("Chronicle Weaver: Entry rejected.");
+        try {
+            await this._removeFromPending(id);
+            ui.notifications.info("Chronicle Weaver: Entry rejected.");
+        } catch (err) {
+            console.error("Chronicle Weaver | Failed to reject entry:", err);
+            ui.notifications.error("Chronicle Weaver: Failed to remove entry. Please try again.");
+        }
     }
 
     async _removeFromPending(id) {

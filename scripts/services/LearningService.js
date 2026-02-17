@@ -6,85 +6,88 @@ export class LearningService {
      * Ingests unread chat history to find new lore.
      */
     async learnFromChat() {
-        console.log("Chronicle Weaver | Learning from chat...");
-        const chatUrl = game.settings.get('chronicle-weaver', 'ollamaUrl');
-        const readerModel = game.settings.get('chronicle-weaver', 'ollamaModel');
-        const coderModel = game.settings.get('chronicle-weaver', 'coderModel');
-        const lastId = game.settings.get('chronicle-weaver', 'lastProcessedMessageId');
+        console.log("Chronicle Weaver | Starting learning process...");
+        const chatLog = game.messages.contents;
+        const lastProcessedId = game.settings.get('chronicle-weaver', 'lastProcessedMessageId');
 
-        // 1. Identify new messages
-        const allMessages = game.messages.contents;
-        let startIndex = 0;
-
-        if (lastId) {
-            const lastIndex = allMessages.findIndex(m => m.id === lastId);
-            if (lastIndex !== -1) {
-                startIndex = lastIndex + 1;
+        // 1. Filter new messages
+        let newMessages = [];
+        const FIRST_RUN_CAP = 100;
+        if (!lastProcessedId) {
+            if (chatLog.length > FIRST_RUN_CAP) {
+                ui.notifications.warn(
+                    `Chronicle Weaver: First run — capping analysis to the most recent ${FIRST_RUN_CAP} messages. ` +
+                    `Use /cw reset then /cw learn to reprocess from scratch if needed.`
+                );
+                newMessages = chatLog.slice(-FIRST_RUN_CAP);
+            } else {
+                newMessages = chatLog;
+            }
+        } else {
+            const index = chatLog.findIndex(m => m.id === lastProcessedId);
+            if (index !== -1 && index < chatLog.length - 1) {
+                newMessages = chatLog.slice(index + 1);
+            } else if (index === -1) {
+                // Marker not found — chat may have been cleared. Cap to recent messages.
+                ui.notifications.warn(
+                    `Chronicle Weaver: Previous marker not found. Analyzing the most recent ${FIRST_RUN_CAP} messages.`
+                );
+                newMessages = chatLog.slice(-FIRST_RUN_CAP);
             }
         }
 
-        const newMessages = allMessages.slice(startIndex).filter(m => m.content && [0, 1, 2].includes(m.type));
-
         if (newMessages.length === 0) {
-            ui.notifications.info("Chronicle Weaver: No new messages to analyze.");
+            console.log("Chronicle Weaver | No new messages to learn from.");
+            ui.notifications.info("Chronicle Weaver: No new messages found since last run.");
             return;
         }
 
         ui.notifications.info(`Chronicle Weaver: Analyzing ${newMessages.length} new messages...`);
 
-        // 2. Chunking Logic (25 messages per chunk, 10 overlap)
-        // Each chunk starts CHUNK_SIZE - OVERLAP messages after the previous one,
-        // so adjacent chunks share OVERLAP messages for continuity.
-        // e.g. chunk 1 = msgs 0-24, chunk 2 = msgs 15-39, chunk 3 = msgs 30-54, ...
-        const CHUNK_SIZE = 25;
-        const OVERLAP = 10;
-        const chunks = [];
+        // 2. Prepare Chunks (Simple Text Blob for now)
+        // Group by 10-20 messages maybe? Let's just do one big chunk for MVP
+        const combinedText = newMessages.map(m => `${m.speaker.alias || 'Unknown'}: ${m.content}`).join('\n');
 
-        for (let i = 0; i < newMessages.length; i += (CHUNK_SIZE - OVERLAP)) {
-            const chunk = newMessages.slice(i, i + CHUNK_SIZE);
-            if (chunk.length === 0) break;
-            chunks.push(chunk);
-        }
+        // 3. Analyze with Reader Model
+        const ollamaUrl = game.settings.get('chronicle-weaver', 'ollamaUrl');
+        const readerModel = game.settings.get('chronicle-weaver', 'ollamaModel');
+        const coderModel = game.settings.get('chronicle-weaver', 'coderModel');
 
-        console.log(`Chronicle Weaver | Processing ${chunks.length} chunks...`);
+        const gatheredInsight = await this._analyzeText(combinedText, readerModel, ollamaUrl);
 
-        // 3. Reader Phase: Analyze each chunk
-        let gatheredInsights = [];
-
-        for (const [index, chunk] of chunks.entries()) {
-            const logText = chunk.map(m => `${m.speaker.alias || 'Unknown'}: ${m.content}`).join('\n');
-            const insight = await this._analyzeChunk(logText, readerModel, chatUrl);
-            if (insight) {
-                gatheredInsights.push(`Chunk ${index + 1} Insights:\n${insight}`);
-            }
-        }
-
-        if (gatheredInsights.length === 0) {
+        if (!gatheredInsight || gatheredInsight.trim().length === 0) {
             console.log("Chronicle Weaver | No insights gathered.");
+            ui.notifications.info("Chronicle Weaver: Analysis complete — no new lore identified.");
             return;
         }
 
-        // 4. Coder Phase: Collate and structure
-        const combinedInsights = gatheredInsights.join('\n\n');
-        await this._structureAndSave(combinedInsights, coderModel, chatUrl);
+        ui.notifications.info(`Chronicle Weaver: Found insights. Structuring...`);
 
-        // 5. Update Marker
-        const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage) {
-            await game.settings.set('chronicle-weaver', 'lastProcessedMessageId', lastMessage.id);
-            console.log(`Chronicle Weaver | Marker updated to ${lastMessage.id}`);
+        // 4. Structure with Coder Model
+        // We pass ALL insights at once. If too many, would need chunking.
+        const saveSucceeded = await this._structureAndSave(gatheredInsight, coderModel, ollamaUrl);
+
+        // 5. Update Marker — only if save succeeded so failed messages can be retried
+        if (saveSucceeded) {
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage) {
+                await game.settings.set('chronicle-weaver', 'lastProcessedMessageId', lastMessage.id);
+                console.log(`Chronicle Weaver | Marker updated to ${lastMessage.id}`);
+            }
+        } else {
+            ui.notifications.warn("Chronicle Weaver: Structuring failed — marker not advanced. Run /cw learn again to retry.");
         }
     }
 
     /**
      * Reader Model: Extracts raw narrative facts.
      */
-    async _analyzeChunk(text, model, url) {
+    async _analyzeText(text, model, url) {
         const prompt = `Read the following RPG chat log and summarize key events, new proper nouns (with descriptions), and character developments.
-        Do NOT output JSON. Just provide a concise bulleted list of facts.
-        
-        Chat Log:
-        ${text}`;
+Do NOT output JSON. Just provide a concise bulleted list of facts.
+
+Chat Log:
+${text}`;
 
         try {
             const response = await fetch(`${url}/api/generate`, {
@@ -112,19 +115,19 @@ export class LearningService {
         console.log("Chronicle Weaver | Structuring insights with Coder...");
 
         const prompt = `You are a data entry assistant. Convert the following RPG session notes into a JSON array of Lorebook entries.
-        Each entry must have:
-        - "keys": array of strings (names, aliases)
-        - "content": string (factual description)
-        
-        Ignore duplicates if mentioned multiple times. Merge the information.
-        
-        Session Notes:
-        ${insights}
-        
-        Format:
-        [
-            { "keys": ["Name"], "content": "Description..." }
-        ]`;
+Each entry must have:
+- "keys": array of strings (names, aliases)
+- "content": string (factual description)
+
+Ignore duplicates if mentioned multiple times. Merge the information.
+
+Session Notes:
+${insights}
+
+Format:
+[
+    { "keys": ["Name"], "content": "Description..." }
+]`;
 
         try {
             const response = await fetch(`${url}/api/generate`, {
@@ -138,21 +141,26 @@ export class LearningService {
                 })
             });
 
+            if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+
             const data = await response.json();
             let entries = [];
             try {
                 entries = JSON.parse(data.response.replace(/```json/g, '').replace(/```/g, '').trim());
             } catch (e) {
                 console.warn("Chronicle Weaver | Failed to parse Coder JSON:", e);
-                return;
+                return false;
             }
 
             if (Array.isArray(entries) && entries.length > 0) {
                 await this.updateGrimoire(entries);
             }
 
+            return true;
+
         } catch (e) {
             console.error("Chronicle Weaver | Coder Error:", e);
+            return false;
         }
     }
 
