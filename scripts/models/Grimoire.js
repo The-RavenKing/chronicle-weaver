@@ -1,71 +1,91 @@
-export class Grimoire {
-    constructor(data = {}) {
-        this.id = data.id || foundry.utils.randomID();
-        this.name = data.name || "New Grimoire";
-        this.description = data.description || "";
-        this.scan_depth = data.scan_depth || 2;
-        this.token_budget = data.token_budget || 500;
-        this.recursive_scanning = data.recursive_scanning || false;
-        this.extensions = data.extensions || {};
-        this.entries = data.entries || [];
+/**
+ * @file Grimoire.js
+ * @description DataModel for a Lorebook / World-Info database (Grimoire).
+ *   Grimoires hold keyword-triggered lore entries that are injected into the
+ *   AI system prompt when their keys appear in recent chat history.
+ *   Compatible with SillyTavern Lorebook JSON format.
+ *
+ *   V13: Extends `foundry.abstract.DataModel` for schema-based validation.
+ */
+
+const { StringField, NumberField, ArrayField, BooleanField, ObjectField } = foundry.data.fields;
+
+export class Grimoire extends foundry.abstract.DataModel {
+
+  /**
+   * Defines the validated schema for Grimoire data.
+   * Entries are stored as plain ObjectField items because their internal
+   * shape varies across imported SillyTavern lorebooks.
+   *
+   * @returns {Object} The schema definition object.
+   */
+  static defineSchema() {
+    return {
+      id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+      name: new StringField({ required: true, initial: "New Grimoire" }),
+      description: new StringField({ initial: "" }),
+      /** How many recent message turns to scan for keyword triggers. */
+      scan_depth: new NumberField({ integer: true, initial: 2, min: 1 }),
+      /** Approximate token budget for injected lore (informational). */
+      token_budget: new NumberField({ integer: true, initial: 500, min: 0 }),
+      recursive_scanning: new BooleanField({ initial: false }),
+      /** Arbitrary SillyTavern extension metadata — preserved on import. */
+      extensions: new ObjectField({ initial: {} }),
+      /** Array of lore entry objects. Each entry has: uid, keys, content, enabled. */
+      entries: new ArrayField(new ObjectField()),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Scanning
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Scans `text` for keyword matches and returns all triggered lore entries,
+   * de-duplicated and sorted by `order`.
+   *
+   * @param {string} text - The combined history + current prompt text to scan.
+   * @returns {Object[]} Array of matching lore entry objects.
+   */
+  scan(text) {
+    const lowerText = text.toLowerCase();
+    const seen      = new Set();
+    const matches   = [];
+
+    for (const entry of this.entries) {
+      if (!entry.enabled) continue;
+      if (!Array.isArray(entry.keys) || entry.keys.length === 0) continue;
+
+      // Primary key check — any single match is sufficient.
+      const primaryMatched = entry.keys.some(k => lowerText.includes(k.toLowerCase()));
+      if (!primaryMatched) continue;
+
+      // Optional secondary key check — at least one secondary key must also match.
+      if (Array.isArray(entry.secondary_keys) && entry.secondary_keys.length > 0) {
+        const secondaryMatched = entry.secondary_keys.some(k => lowerText.includes(k.toLowerCase()));
+        if (!secondaryMatched) continue;
+      }
+
+      const entryKey = entry.uid ?? `__idx_${this.entries.indexOf(entry)}`;
+      if (seen.has(entryKey)) continue;
+
+      matches.push(entry);
+      seen.add(entryKey);
     }
 
-    /**
-     * Checks text for keywords and returns matching entries.
-     * @param {string} text - The text to scan for keywords.
-     * @returns {Array} - Array of matching entry contents.
-     */
-    scan(text) {
-        const matches = [];
-        const seenEntries = new Set();
-        const lowerText = text.toLowerCase();
+    return matches.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }
 
-        for (const entry of this.entries) {
-            if (!entry.enabled) continue;
-            if (!Array.isArray(entry.keys) || entry.keys.length === 0) continue;
+  // ---------------------------------------------------------------------------
+  // Serialisation
+  // ---------------------------------------------------------------------------
 
-            // Check keys (primary keywords)
-            let matched = false;
-            for (const key of entry.keys) {
-                if (lowerText.includes(key.toLowerCase())) {
-                    matched = true;
-                    break;
-                }
-            }
-
-            // Check secondary keys if primary matched (or if no secondary keys exist)
-            if (matched && Array.isArray(entry.secondary_keys) && entry.secondary_keys.length > 0) {
-                let secondaryMatched = false;
-                for (const key of entry.secondary_keys) {
-                    if (lowerText.includes(key.toLowerCase())) {
-                        secondaryMatched = true;
-                        break;
-                    }
-                }
-                if (!secondaryMatched) matched = false;
-            }
-
-            const entryKey = entry.uid ?? `__idx_${this.entries.indexOf(entry)}`;
-            if (matched && !seenEntries.has(entryKey)) {
-                matches.push(entry);
-                seenEntries.add(entryKey);
-            }
-        }
-
-        // Sort by order if set, otherwise preserve insertion order
-        return matches.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    }
-
-    toJSON() {
-        return {
-            id: this.id,
-            name: this.name,
-            description: this.description,
-            scan_depth: this.scan_depth,
-            token_budget: this.token_budget,
-            recursive_scanning: this.recursive_scanning,
-            extensions: this.extensions,
-            entries: this.entries
-        };
-    }
+  /**
+   * Serialises this Grimoire to a plain object suitable for `game.settings.set`.
+   *
+   * @returns {Object} Plain serialisable representation of this Grimoire.
+   */
+  toJSON() {
+    return this.toObject();
+  }
 }

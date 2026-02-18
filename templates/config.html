@@ -1,160 +1,221 @@
-<form class="chronicle-weaver-config" autocomplete="off">
-    <header class="sheet-header">
-        <h1>Chronicle Weaver Configuration</h1>
-    </header>
+{{!--
+  templates/config.html
+  Chronicle Weaver — Configuration UI
+
+  V13 notes:
+  - All interactive elements use `data-action` to bind to the actions map
+    in ChronicleWeaverConfig.DEFAULT_OPTIONS.actions.
+  - Tab navigation uses Foundry's native `data-group` / `data-tab` system,
+    auto-wired by HandlebarsApplicationMixin via `tabGroups` in DEFAULT_OPTIONS.
+  - Hidden file inputs are wired via _onRender (file inputs can't carry
+    data-action; a button action triggers .click() on them instead).
+  - Root element is a <div>, not a <form> — ApplicationV2 does not use
+    _updateObject. Saves happen atomically per action.
+--}}
+
+<div class="chronicle-weaver-config">
+
+  {{!-- ── Connection Settings ─────────────────────────────────────────────── --}}
+  <section class="cw-settings-bar">
 
     <div class="form-group">
-        <label>Ollama URL</label>
-        <div class="form-fields">
-            <input type="text" name="ollamaUrl" value="{{ollamaUrl}}" placeholder="http://localhost:11434">
-            <button type="button" id="cw-test-connection" title="Test Connection">
-                <i class="fas fa-plug"></i> Test
-            </button>
-        </div>
-        <p class="notes">Ensure Ollama is running and accessible (e.g. `OLLAMA_ORIGINS="*"`).</p>
-    </div>
-
-    <div class="form-group">
-        <label>Chat Model (Reader)</label>
-        <div class="form-fields">
-            <select name="ollamaModel">
-                <option value="" {{#unless ollamaModel}}selected{{/unless}}>-- Select Model --</option>
-                {{#each availableModels}}
-                <option value="{{this}}" {{#if (eq this ../ollamaModel)}}selected{{/if}}>{{this}}</option>
-                {{/each}}
-            </select>
-            <button type="button" id="cw-refresh-models" title="Refresh Models">
-                <i class="fas fa-sync"></i>
-            </button>
-        </div>
-        <p class="notes">Used for chat responses and log analysis.</p>
-    </div>
-
-    <div class="form-group">
-        <label>Coder Model</label>
-        <div class="form-fields">
-            <select name="coderModel">
-                <option value="" {{#unless coderModel}}selected{{/unless}}>-- Select Model --</option>
-                {{#each availableModels}}
-                <option value="{{this}}" {{#if (eq this ../coderModel)}}selected{{/if}}>{{this}}</option>
-                {{/each}}
-            </select>
-        </div>
-        <p class="notes">Used for structuring JSON data (recommend `qwen2.5-coder` or similar).</p>
-    </div>
-
-    <hr class="cw-divider">
-
-    <nav class="sheet-tabs tabs" data-group="primary">
-        <a class="item" data-tab="spirits"><i class="fas fa-ghost"></i> Spirits</a>
-        <a class="item" data-tab="souls"><i class="fas fa-users"></i> Souls</a>
-        <a class="item" data-tab="grimoires"><i class="fas fa-book-journal-whills"></i> Grimoires</a>
-    </nav>
-
-    <section class="content">
-        <!-- SPIRITS TAB (AI Personas) -->
-        <div class="tab" data-tab="spirits">
-            <h2>Spirits of the Weaver (AI Personas)</h2>
-            <p class="notes">These are the personalities the AI can adopt (e.g., The Narrator, A Mysterious Merchant).
-            </p>
-
-            <div class="form-group">
-                <label>Active Spirit</label>
-                <div class="form-fields">
-                    <select name="activeSpirit" class="active-spirit-select">
-                        <option value="">-- No Active Spirit --</option>
-                        {{#each spirits}}
-                        <option value="{{this.id}}" {{#if (eq this.id ../activeSpirit)}}selected{{/if}}>
-                            {{this.name}}</option>
-                        {{/each}}
-                    </select>
-                </div>
-                <p class="notes">Select which Spirit currently listens to chat and responds.</p>
-            </div>
-            <hr class="cw-divider">
-            <div class="action-bar flexrow">
-                <button type="button" class="item-create" data-type="spirit"><i class="fas fa-plus"></i> Create
-                    New</button>
-                <button type="button" class="import-spirit"><i class="fas fa-file-import"></i> Import JSON</button>
-                <input type="file" id="import-spirit-file" accept=".json" style="display:none;">
-            </div>
-
-            <ul class="item-list">
-                {{#each spirits}}
-                <li class="item flexrow" data-id="{{this.id}}" data-type="spirit">
-                    <div class="item-name"><strong>{{this.name}}</strong></div>
-                    <div class="item-controls">
-                        <a class="item-edit" title="Edit Spirit"><i class="fas fa-edit"></i></a>
-                        <a class="item-delete" title="Delete Spirit"><i class="fas fa-trash"></i></a>
-                    </div>
-                </li>
-                {{else}}
-                <li class="item flexrow">No Spirits defined.</li>
-                {{/each}}
-            </ul>
-        </div>
-
-        <!-- SOULS TAB (Player Characters) -->
-        <div class="tab" data-tab="souls">
-            <h2>Souls (Player Characters)</h2>
-            <p class="notes">These represent Player Characters. Use the checkbox on Actor Sheets to add them here.</p>
-
-            <div class="action-bar flexrow">
-                <button type="button" class="import-soul-actor"><i class="fas fa-user-plus"></i> Import Actor</button>
-                <button type="button" class="import-soul"><i class="fas fa-file-import"></i> Import JSON</button>
-                <input type="file" id="import-soul-file" accept=".json" style="display:none;">
-            </div>
-
-            <ul class="item-list">
-                {{#each souls}}
-                <li class="item flexrow" data-id="{{this.id}}" data-type="soul">
-                    <div class="item-name"><strong>{{this.name}}</strong> ({{this.attributes.class}}
-                        {{this.attributes.level}})</div>
-                    <div class="item-controls">
-                        <a class="item-edit" title="Edit Soul"><i class="fas fa-edit"></i></a>
-                        <a class="item-delete" title="Unlink Soul"><i class="fas fa-trash"></i></a>
-                    </div>
-                </li>
-                {{else}}
-                <li class="item flexrow">No Souls defined.</li>
-                {{/each}}
-            </ul>
-        </div>
-
-        <!-- GRIMOIRES TAB -->
-        <div class="tab" data-tab="grimoires">
-            <h2>Grimoires (Lorebooks)</h2>
-            <p class="notes">Knowledge bases for the AI.</p>
-
-            <div class="action-bar flexrow">
-                <button type="button" class="item-create" data-type="grimoire"><i class="fas fa-plus"></i> Create
-                    New</button>
-                <button type="button" class="import-grimoire"><i class="fas fa-file-import"></i> Import JSON</button>
-                <input type="file" id="import-grimoire-file" accept=".json" style="display:none;">
-            </div>
-
-            <ul class="item-list">
-                {{#each grimoires}}
-                <li class="item flexrow" data-id="{{this.id}}" data-type="grimoire">
-                    <div class="item-name"><strong>{{this.name}}</strong> ({{this.entries.length}} entries)</div>
-                    <div class="item-controls">
-                        <a class="item-edit" title="Edit Grimoire"><i class="fas fa-edit"></i></a>
-                        <a class="item-delete" title="Delete Grimoire"><i class="fas fa-trash"></i></a>
-                    </div>
-                </li>
-                {{else}}
-                <li class="item flexrow">No Grimoires defined.</li>
-                {{/each}}
-            </ul>
-        </div>
-    </section>
-
-    <footer class="sheet-footer flexrow">
-        <button type="submit" name="submit">
-            <i class="fas fa-save"></i> Save Changes
+      <label>Ollama URL</label>
+      <div class="form-fields">
+        <input type="text" name="ollamaUrl" value="{{ollamaUrl}}"
+               placeholder="http://localhost:11434" data-action="changeSetting">
+        <button type="button" data-action="testConnection" title="Test Connection">
+          <i class="fas fa-plug"></i> Test
         </button>
-        <button type="button" class="open-review-queue">
-            <i class="fas fa-inbox"></i> Review Queue {{#if pendingCount}}({{pendingCount}}){{/if}}
+      </div>
+      <p class="notes">Ensure Ollama is accessible (set <code>OLLAMA_ORIGINS="*"</code> if needed).</p>
+    </div>
+
+    <div class="form-group">
+      <label>Chat Model (Reader)</label>
+      <div class="form-fields">
+        <select name="ollamaModel" data-action="changeSetting">
+          <option value="" {{#unless ollamaModel}}selected{{/unless}}>— Select Model —</option>
+          {{#each availableModels}}
+            <option value="{{this}}" {{#if (eq this ../ollamaModel)}}selected{{/if}}>{{this}}</option>
+          {{/each}}
+        </select>
+        <button type="button" data-action="refreshModels" title="Refresh model list">
+          <i class="fas fa-sync"></i>
         </button>
-    </footer>
-</form>
+      </div>
+      <p class="notes">Used for chat responses and log analysis.</p>
+    </div>
+
+    <div class="form-group">
+      <label>Coder Model</label>
+      <div class="form-fields">
+        <select name="coderModel" data-action="changeSetting">
+          <option value="" {{#unless coderModel}}selected{{/unless}}>— Select Model —</option>
+          {{#each availableModels}}
+            <option value="{{this}}" {{#if (eq this ../coderModel)}}selected{{/if}}>{{this}}</option>
+          {{/each}}
+        </select>
+      </div>
+      <p class="notes">Used for JSON lore structuring (recommend <code>qwen2.5-coder</code>).</p>
+    </div>
+
+  </section>
+
+  <hr>
+
+  {{!-- ── Tab Navigation ───────────────────────────────────────────────────── --}}
+  {{!--
+    V13: `data-group` must match the key in `tabGroups` in DEFAULT_OPTIONS.
+    HandlebarsApplicationMixin sets aria-selected and handles click routing
+    automatically — no JS listener required here.
+  --}}
+  <nav class="sheet-tabs tabs" data-group="primary">
+    <a class="item" data-tab="spirits"><i class="fas fa-ghost"></i> Spirits (AI Personas)</a>
+    <a class="item" data-tab="souls"><i class="fas fa-users"></i> Souls (Players)</a>
+    <a class="item" data-tab="grimoires"><i class="fas fa-book-journal-whills"></i> Grimoires</a>
+  </nav>
+
+  <section class="content">
+
+    {{!-- ── SPIRITS TAB ──────────────────────────────────────────────────── --}}
+    <div class="tab" data-tab="spirits" data-group="primary">
+
+      <h2>Spirits of the Weaver <span class="subtitle">(AI Personas)</span></h2>
+      <p class="notes">
+        Spirits are the AI personalities that narrate and respond in chat
+        (e.g. The Narrator, A Mysterious Merchant).
+      </p>
+
+      <div class="form-group">
+        <label>Active Spirit</label>
+        <div class="form-fields">
+          <select name="activeSpirit" data-action="changeActiveSpirit">
+            <option value="">— No Active Spirit —</option>
+            {{#each spirits}}
+              <option value="{{this.id}}" {{#if (eq this.id ../activeSpirit)}}selected{{/if}}>
+                {{this.name}}
+              </option>
+            {{/each}}
+          </select>
+        </div>
+        <p class="notes">This Spirit listens to chat and generates AI responses.</p>
+      </div>
+
+      <hr>
+
+      <div class="action-bar flexrow">
+        <button type="button" data-action="createItem" data-type="spirit">
+          <i class="fas fa-plus"></i> New Spirit
+        </button>
+        <button type="button" data-action="importSpiritPick">
+          <i class="fas fa-file-import"></i> Import JSON (SillyTavern)
+        </button>
+        <input type="file" id="import-spirit-file" accept=".json" style="display:none;">
+      </div>
+
+      <ul class="item-list">
+        {{#each spirits}}
+          <li class="item flexrow" data-id="{{this.id}}" data-type="spirit">
+            {{#if this.color}}
+              <span class="cw-color-swatch" style="background:{{this.color}};"></span>
+            {{/if}}
+            <div class="item-name"><strong>{{this.name}}</strong></div>
+            <div class="item-controls">
+              <a data-action="editItem" title="Edit Spirit"><i class="fas fa-edit"></i></a>
+              <a data-action="deleteItem" title="Delete Spirit"><i class="fas fa-trash"></i></a>
+            </div>
+          </li>
+        {{else}}
+          <li class="item flexrow cw-empty">No Spirits defined yet.</li>
+        {{/each}}
+      </ul>
+
+    </div>
+
+    {{!-- ── SOULS TAB ────────────────────────────────────────────────────── --}}
+    <div class="tab" data-tab="souls" data-group="primary">
+
+      <h2>Souls <span class="subtitle">(Player Characters)</span></h2>
+      <p class="notes">
+        Souls represent Player Characters. Use the <strong>CW: PC</strong>
+        toggle on Actor Sheets to sync them automatically, or import manually.
+      </p>
+
+      <div class="action-bar flexrow">
+        <button type="button" data-action="importSoulActor">
+          <i class="fas fa-user-plus"></i> Import from Actor
+        </button>
+        <button type="button" data-action="importSoulPick">
+          <i class="fas fa-file-import"></i> Import JSON
+        </button>
+        <input type="file" id="import-soul-file" accept=".json" style="display:none;">
+      </div>
+
+      <ul class="item-list">
+        {{#each souls}}
+          <li class="item flexrow" data-id="{{this.id}}" data-type="soul">
+            {{#if this.color}}
+              <span class="cw-color-swatch" style="background:{{this.color}};"></span>
+            {{/if}}
+            <div class="item-name">
+              <strong>{{this.name}}</strong>
+              <span class="cw-meta">{{this.attributes.class}} {{this.attributes.level}}</span>
+            </div>
+            <div class="item-controls">
+              <a data-action="editItem" title="Edit Soul"><i class="fas fa-edit"></i></a>
+              <a data-action="deleteItem" title="Unlink Soul"><i class="fas fa-trash"></i></a>
+            </div>
+          </li>
+        {{else}}
+          <li class="item flexrow cw-empty">No Souls defined yet.</li>
+        {{/each}}
+      </ul>
+
+    </div>
+
+    {{!-- ── GRIMOIRES TAB ──────────────────────────────────────────────── --}}
+    <div class="tab" data-tab="grimoires" data-group="primary">
+
+      <h2>Grimoires <span class="subtitle">(Lorebooks)</span></h2>
+      <p class="notes">Keyword-triggered knowledge bases injected into the AI system prompt.</p>
+
+      <div class="action-bar flexrow">
+        <button type="button" data-action="createItem" data-type="grimoire">
+          <i class="fas fa-plus"></i> New Grimoire
+        </button>
+        <button type="button" data-action="importGrimoirePick">
+          <i class="fas fa-file-import"></i> Import JSON (SillyTavern Lorebook)
+        </button>
+        <input type="file" id="import-grimoire-file" accept=".json" style="display:none;">
+      </div>
+
+      <ul class="item-list">
+        {{#each grimoires}}
+          <li class="item flexrow" data-id="{{this.id}}" data-type="grimoire">
+            <div class="item-name">
+              <strong>{{this.name}}</strong>
+              <span class="cw-meta">{{this.entries.length}} entries</span>
+            </div>
+            <div class="item-controls">
+              <a data-action="editItem" title="Edit Grimoire"><i class="fas fa-edit"></i></a>
+              <a data-action="deleteItem" title="Delete Grimoire"><i class="fas fa-trash"></i></a>
+            </div>
+          </li>
+        {{else}}
+          <li class="item flexrow cw-empty">No Grimoires defined yet.</li>
+        {{/each}}
+      </ul>
+
+    </div>
+
+  </section>
+
+  {{!-- ── Footer ──────────────────────────────────────────────────────────── --}}
+  <footer class="sheet-footer flexrow">
+    <button type="button" data-action="openReviewQueue">
+      <i class="fas fa-inbox"></i>
+      Review Queue{{#if pendingCount}} ({{pendingCount}}){{/if}}
+    </button>
+  </footer>
+
+</div>

@@ -1,548 +1,506 @@
-import { ChatService } from './services/ChatService.js';
-import { LearningService } from './services/LearningService.js';
-import { Grimoire } from './models/Grimoire.js';
-import { Soul } from './models/Soul.js';
-import { Spirit } from './models/Spirit.js';
-import { ChronicleWeaverConfig } from './apps/ChronicleWeaverConfig.js';
+/**
+ * @file chronicle-weaver.js
+ * @description Main module entry point for Chronicle Weaver.
+ *   Registers settings, injects PC-toggle controls into actor sheets,
+ *   applies coloured dialogue formatting, and drives the auto-weave
+ *   chat response pipeline.
+ *
+ *   V13 compliance:
+ *   - All hook handlers use plain DOM APIs — no jQuery.
+ *   - renderChatMessage guard prevents TypeError crash during world load (Bug 1 fix).
+ *   - processTextNodes strips italic asterisks correctly (Bug 3 fix).
+ *   - HTML-escapes interpolated content before innerHTML assignment (Bug 4 fix).
+ */
 
-console.log("Chronicle Weaver | Loading...");
+import { ChatService } from "./services/ChatService.js";
+import { LearningService } from "./services/LearningService.js";
+import { Grimoire } from "./models/Grimoire.js";
+import { Soul } from "./models/Soul.js";
+import { Spirit } from "./models/Spirit.js";
+import { ChronicleWeaverConfig } from "./apps/ChronicleWeaverConfig.js";
 
-// Ensure MODULE_ID is available globally within the module scope
-const MODULE_ID = 'chronicle-weaver';
+console.log("Chronicle Weaver | Loading…");
 
-Hooks.once('init', () => {
-    console.log("Chronicle Weaver | Initializing settings...");
-    registerSettings();
+const MODULE_ID = "chronicle-weaver";
 
-    // --------------------------------------------------------
-    // METHOD 1: Sidebar Context Menu (Reliable Fallback)
-    // --------------------------------------------------------
-    Hooks.on('getActorDirectoryEntryContext', (html, options) => {
-        options.push({
-            name: "CW: Toggle PC Status",
-            icon: '<i class="fas fa-scroll"></i>',
-            condition: (li) => {
-                const actorId = li.data("documentId");
-                const actor = game.actors.get(actorId);
-                return game.user.isGM && actor;
-            },
-            callback: async (li) => {
-                const actorId = li.data("documentId");
-                const actor = game.actors.get(actorId);
-                const isPC = actor.getFlag(MODULE_ID, 'isPC') || false;
+// =============================================================================
+// INIT — settings & hook registration
+// =============================================================================
 
-                await actor.setFlag(MODULE_ID, 'isPC', !isPC);
+Hooks.once("init", () => {
+  console.log("Chronicle Weaver | Initialising settings…");
+  registerSettings();
 
-                if (!isPC) {
-                    ui.notifications.info(`Chronicle Weaver: ${actor.name} marked as PC.`);
-                    if (game.chronicleWeaver?.soulManager) {
-                        await game.chronicleWeaver.soulManager.updateFromActor(actor);
-                    }
-                } else {
-                    ui.notifications.info(`Chronicle Weaver: ${actor.name} un-marked.`);
-                    if (game.chronicleWeaver?.soulManager) {
-                        await game.chronicleWeaver.soulManager.updateFromActor(actor);
-                    }
-                }
-            }
-        });
+  // ---------------------------------------------------------------------------
+  // METHOD 1: Sidebar context menu (most reliable fallback)
+  // ---------------------------------------------------------------------------
+  Hooks.on("getActorDirectoryEntryContext", (html, options) => {
+    options.push({
+      name: "CW: Toggle PC Status",
+      icon: '<i class="fas fa-scroll"></i>',
+      condition: li => {
+        const actor = game.actors.get(li.dataset.documentId);
+        return game.user.isGM && !!actor;
+      },
+      callback: async li => {
+        const actor = game.actors.get(li.dataset.documentId);
+        if (!actor) return;
+        const isPC = actor.getFlag(MODULE_ID, "isPC") ?? false;
+        await actor.setFlag(MODULE_ID, "isPC", !isPC);
+        ui.notifications.info(
+          `Chronicle Weaver: ${actor.name} ${!isPC ? "marked as" : "un-marked as"} PC.`
+        );
+        await game.chronicleWeaver?.soulManager?.updateFromActor(actor);
+      },
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // METHOD 2: Header button injection for legacy ActorSheet (V1 sheets)
+  // ---------------------------------------------------------------------------
+  const HEADER_HOOKS = [
+    "getCharacterActorSheetHeaderButtons",
+    "getActorSheetHeaderButtons",
+    "getActorSheet5eCharacterHeaderButtons",
+    "getApplicationHeaderButtons",
+  ];
+
+  HEADER_HOOKS.forEach(hookName => {
+    Hooks.on(hookName, (app, buttons) => {
+      if (!game.user.isGM) return;
+      if (buttons.some(b => b.class === "cw-pc-toggle")) return;
+
+      const actor = app.actor ?? app.document ?? app.object;
+      if (!actor || !(actor instanceof Actor)) return;
+
+      const allowedClasses = [
+        ...game.settings.get(MODULE_ID, "supportedSheetClasses")
+          .split(",").map(c => c.trim()),
+        "ActorSheet",
+        "ActorSheet5eCharacter",
+      ];
+      const isTarget =
+        allowedClasses.includes(app.constructor?.name) ||
+        app.document instanceof Actor;
+      if (!isTarget) return;
+
+      const isPC = actor.getFlag(MODULE_ID, "isPC") ?? false;
+      buttons.unshift({
+        label: "CW: PC",
+        class: "cw-pc-toggle",
+        icon: isPC ? "fas fa-check-square" : "far fa-square",
+        onclick: async () => {
+          const current = actor.getFlag(MODULE_ID, "isPC") ?? false;
+          await actor.setFlag(MODULE_ID, "isPC", !current);
+          app.render();
+          ui.notifications.info(
+            `Chronicle Weaver: ${actor.name} ${!current ? "marked as" : "un-marked as"} PC.`
+          );
+          await game.chronicleWeaver?.soulManager?.updateFromActor(actor);
+        },
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // METHOD 3: DOM injection for AppV2 / non-standard sheets
+  // V13: `html` parameter in renderApplication is an HTMLElement — no jQuery.
+  // ---------------------------------------------------------------------------
+  Hooks.on("renderApplication", (app, html) => {
+    if (!game.user.isGM) return;
+    const actor = app.document ?? app.object ?? app.actor;
+    if (!actor || !(actor instanceof Actor)) return;
+
+    const windowEl = html.classList?.contains("window-app")
+      ? html
+      : html.closest?.(".window-app");
+
+    const header = windowEl?.querySelector(".window-header");
+    if (!header || header.querySelector(".cw-pc-toggle")) return;
+
+    const isPC = actor.getFlag(MODULE_ID, "isPC") ?? false;
+    const title = header.querySelector(".window-title");
+
+    const btn = document.createElement("a");
+    btn.className = "header-control cw-pc-toggle";
+    btn.title = "CW: Toggle PC";
+    btn.innerHTML = `<i class="${isPC ? "fas fa-check-square" : "far fa-square"}"></i> CW`;
+
+    btn.addEventListener("click", async () => {
+      const current = actor.getFlag(MODULE_ID, "isPC") ?? false;
+      await actor.setFlag(MODULE_ID, "isPC", !current);
+      btn.querySelector("i").className = !current ? "fas fa-check-square" : "far fa-square";
+      ui.notifications.info(
+        `Chronicle Weaver: ${actor.name} ${!current ? "marked as" : "un-marked as"} PC.`
+      );
+      await game.chronicleWeaver?.soulManager?.updateFromActor(actor);
     });
 
-    // --------------------------------------------------------
-    // METHOD 2: Classic Hook Injection (Standard Sheets)
-    // --------------------------------------------------------
-    const hookNames = [
-        'getCharacterActorSheetHeaderButtons',
-        'getActorSheetHeaderButtons',
-        'getActorSheet5eCharacterHeaderButtons',
-        'getApplicationHeaderButtons'
-    ];
+    title?.after(btn);
+  });
 
-    hookNames.forEach(hookName => {
-        Hooks.on(hookName, (app, buttons) => {
-            // Use user-defined classes + standard ones
-            const allowedClasses = game.settings.get(MODULE_ID, 'supportedSheetClasses').split(',').map(c => c.trim());
-            allowedClasses.push('ActorSheet', 'ActorSheet5eCharacter');
+  // ---------------------------------------------------------------------------
+  // Coloured Dialogue & Markdown formatting
+  //
+  // V13: `html` parameter in renderChatMessage is an HTMLElement — no jQuery.
+  //
+  // Bug 1 fix: Guard `game.chronicleWeaver` — this hook fires during world
+  //   load when Foundry re-renders the existing chat log, BEFORE `ready` runs,
+  //   making game.chronicleWeaver undefined. Without this guard every existing
+  //   message throws a TypeError on load.
+  // ---------------------------------------------------------------------------
+  Hooks.on("renderChatMessage", (message, html) => {
+    // Bug 1 — early exit if module is not yet initialised.
+    if (!game.chronicleWeaver) return;
 
-            const appClass = app.constructor?.name;
+    const speaker = message.speaker;
+    if (!speaker?.alias) return;
 
-            // Check if class is allowed or if it inherits from Actor
-            let isTarget = false;
-            if (allowedClasses.includes(appClass)) isTarget = true;
-            if (app.document instanceof Actor) isTarget = true;
-
-            if (!isTarget) return;
-
-            handleHeaderButtons(app, buttons).catch(err => console.error("Chronicle Weaver | handleHeaderButtons error:", err));
-        });
-    });
-
-    // --------------------------------------------------------
-    // METHOD 3: DOM Injection (AppV2 / Non-Standard Sheets)
-    // --------------------------------------------------------
-    Hooks.on('renderApplication', (app, html, data) => {
-        // Fallback for new sheets that don't trigger header buttons hook
-        if (!game.user.isGM) return;
-        const actor = app.document || app.object || app.actor;
-        if (!actor || !(actor instanceof Actor)) return;
-
-        // Dedup: Check if button already exists in DOM
-        // Note: html might be the window OR content depending on app type.
-        // We look broadly.
-        const appWindow = $(app.element);
-        const windowHeader = appWindow.hasClass('window-app')
-            ? appWindow.find('.window-header')
-            : appWindow.closest('.window-app').find('.window-header');
-
-        if (windowHeader && windowHeader.length > 0) {
-            if (windowHeader.find('.cw-pc-toggle').length === 0) {
-                // console.log("Chronicle Weaver | Injecting DOM button for", app.title);
-                const isPC = actor.getFlag(MODULE_ID, 'isPC') || false;
-                // Insert before close button (usually last)
-                const title = windowHeader.find('.window-title');
-                const btn = $(`<a class="header-control cw-pc-toggle" title="CW: Toggle PC"><i class="${isPC ? 'fas fa-check-square' : 'far fa-square'}"></i> CW</a>`);
-
-                btn.on('click', async () => {
-                    // Read current state fresh from actor each click to avoid stale closure
-                    const currentState = actor.getFlag(MODULE_ID, 'isPC') || false;
-                    const newState = !currentState;
-                    await actor.setFlag(MODULE_ID, 'isPC', newState);
-                    btn.find('i').attr('class', newState ? 'fas fa-check-square' : 'far fa-square');
-
-                    if (newState) {
-                        ui.notifications.info(`Chronicle Weaver: ${actor.name} marked as PC.`);
-                        if (game.chronicleWeaver?.soulManager) {
-                            await game.chronicleWeaver.soulManager.updateFromActor(actor);
-                        }
-                    } else {
-                        ui.notifications.info(`Chronicle Weaver: ${actor.name} un-marked.`);
-                        if (game.chronicleWeaver?.soulManager) {
-                            await game.chronicleWeaver.soulManager.updateFromActor(actor);
-                        }
-                    }
-                });
-
-                // Insert after title
-                title.after(btn);
-            }
-        }
-    });
-
-    // Handle the button insertion logic (Internal helper)
-    async function handleHeaderButtons(app, buttons) {
-        if (buttons.find(b => b.class === 'cw-pc-toggle')) return;
-
-        const actor = app.actor || app.document || app.object;
-        if (!actor || !(actor instanceof Actor)) return;
-        if (!game.user.isGM) return;
-
-        const isPC = actor.getFlag(MODULE_ID, 'isPC') || false;
-        buttons.unshift({
-            label: "CW: PC",
-            class: "cw-pc-toggle",
-            icon: isPC ? 'fas fa-check-square' : 'far fa-square',
-            onclick: async (ev) => {
-                // Read fresh state from actor to avoid stale closure
-                const currentState = actor.getFlag(MODULE_ID, 'isPC') || false;
-                const newState = !currentState;
-                await actor.setFlag(MODULE_ID, 'isPC', newState);
-                app.render(); // Re-render to update icon
-                if (newState) {
-                    ui.notifications.info(`Chronicle Weaver: ${actor.name} marked as PC.`);
-                    if (game.chronicleWeaver?.soulManager) {
-                        await game.chronicleWeaver.soulManager.updateFromActor(actor);
-                    }
-                } else {
-                    ui.notifications.info(`Chronicle Weaver: ${actor.name} un-marked.`);
-                    if (game.chronicleWeaver?.soulManager) {
-                        await game.chronicleWeaver.soulManager.updateFromActor(actor);
-                    }
-                }
-            }
-        });
+    let color = null;
+    if (message.getFlag(MODULE_ID, "isAI")) {
+      const spirit = game.chronicleWeaver.spirits.find(s => s.name === speaker.alias);
+      if (spirit?.color && spirit.color !== "#ffffff") color = spirit.color;
+    } else {
+      const soul =
+        (speaker.actor
+          ? game.chronicleWeaver.souls.find(s => s.foundry_actor_id === speaker.actor)
+          : null) ??
+        game.chronicleWeaver.souls.find(s => s.name === speaker.alias);
+      if (soul?.color && soul.color !== "#ffffff") color = soul.color;
     }
 
+    const contentDiv = html.querySelector(".message-content");
+    if (contentDiv) Array.from(contentDiv.childNodes).forEach(processTextNodes);
 
-    // --------------------------------------------------------
-    // FEATURE: Colored Dialogue (SillyTavern Style)
-    // --------------------------------------------------------
-    Hooks.on('renderChatMessage', (message, html, data) => {
-        if (!game.chronicleWeaver) return; // Fix Bug 1: Prevent crash if called before ready hook (e.g. during world load)
+    // Always add the class to enable CSS formatting (white-space: pre-wrap)
+    // even if no custom color is set.
+    if (message.getFlag(MODULE_ID, "isAI") ||
+      game.chronicleWeaver.souls.some(s => s.name === speaker.alias) ||
+      (speaker.actor && game.chronicleWeaver.souls.some(s => s.foundry_actor_id === speaker.actor))) {
+      html.classList.add("cw-message");
+    }
 
-        const speaker = message.speaker;
-        if (!speaker.alias) return;
-
-        let color = null;
-
-        // 1. Check if AI (Spirit)
-        if (message.getFlag(MODULE_ID, 'isAI')) {
-            const spirit = game.chronicleWeaver.spirits.find(s => s.name === speaker.alias);
-            if (spirit && spirit.color) color = spirit.color;
-        }
-        // 2. Check if PC (Soul)
-        else {
-            // Try by Actor ID
-            if (speaker.actor) {
-                const soul = game.chronicleWeaver.souls.find(s => s.foundry_actor_id === speaker.actor);
-                if (soul && soul.color) color = soul.color;
-            }
-            // Fallback by Name (e.g. if unlinked or different actor)
-            if (!color) {
-                const soul = game.chronicleWeaver.souls.find(s => s.name === speaker.alias);
-                if (soul && soul.color) color = soul.color;
-            }
-        }
-
-        // Apply formatting (Speech & Actions) - utilizing Text Node traversal to avoid breaking HTML attributes
-        const contentDiv = html.find('.message-content');
-
-        // Helper to process text nodes
-        function processTextNodes(node) {
-            if (node.nodeType === 3) { // Text node
-                let text = node.nodeValue;
-                let changed = false;
-
-                // Single-pass replacement to avoid regex collisions and handle formatting
-                // 1. **Markdown Bold Action** (e.g. **Speaker:**) - frequent in AI output
-                // 2. *Markdown Italic Action* (e.g. *sits down*)
-                // 3. "Speech"
-                const regex = /(\*\*[^*]+\*\*)|(\*[^*]+\*)|("[^"]+")/g;
-
-                if (regex.test(text)) {
-                    // Helper to escape HTML characters to prevent breakage from AI output (Fix Bug 4)
-                    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-                    const newHtml = text.replace(regex, (match, boldAction, italicAction, speechGroup) => {
-                        if (boldAction) {
-                            // Handle **Speaker:** -> Bold + Action color
-                            // If it ends with ':', it's likely a speaker label -> Add Line Break before
-                            const isHeader = boldAction.includes(':');
-                            const content = `<strong><span class="cw-action">${esc(boldAction.replace(/\*\*/g, ''))}</span></strong>`;
-                            return isHeader ? `<br/><br/>${content} ` : content;
-                        } else if (italicAction) {
-                            // Handle *Action* -> Italic + Action color
-                            // If it looks like a header (e.g. *Speaker:*), add break
-                            // Fix Bug 3: Strip leading/trailing asterisks
-                            const isHeader = italicAction.includes(':');
-                            const content = `<span class="cw-action">${esc(italicAction.replace(/^\*|\*$/g, ''))}</span>`;
-                            return isHeader ? `<br/><br/>${content} ` : content;
-                        } else if (speechGroup) {
-                            // Handle "Speech" -> Bold (via CSS)
-                            return `<span class="cw-speech">${esc(speechGroup)}</span>`;
-                        }
-                        return esc(match);
-                    });
-
-                    const span = document.createElement('span');
-                    span.innerHTML = newHtml;
-                    node.parentNode.replaceChild(span, node);
-                }
-            } else if (node.nodeType === 1) { // Element node
-                // Recursively handle children, but skip our own inserted spans to avoid double processing if re-run
-                if (!node.classList.contains('cw-action') && !node.classList.contains('cw-speech')) {
-                    Array.from(node.childNodes).forEach(processTextNodes);
-                }
-            }
-        }
-
-        contentDiv.contents().each(function () {
-            processTextNodes(this);
-        });
-
-        if (color && color !== '#ffffff') {
-            // Apply visual styling
-            html.css('border-left', `4px solid ${color}`);
-            html.find('.message-header .message-sender').css('color', color);
-            html.find('.message-header .message-sender').css('font-weight', 'bold');
-            // Optional: Subtle background tint
-            html.css('background', `linear-gradient(to right, ${color}11, transparent)`);
-        }
-
-    });
+    if (color) {
+      html.style.borderLeft = `4px solid ${color}`;
+      html.style.background = `linear-gradient(to right, ${color}11, transparent)`;
+      const sender = html.querySelector(".message-header .message-sender");
+      if (sender) {
+        sender.style.color = color;
+        sender.style.fontWeight = "bold";
+      }
+    }
+  });
 });
 
-Hooks.once('ready', async () => {
-    console.log("Chronicle Weaver | Ready!");
+// =============================================================================
+// READY
+// =============================================================================
 
-    game.chronicleWeaver = {
-        chatService: new ChatService(),
-        learningService: new LearningService(),
-        models: { Grimoire, Soul, Spirit },
-        grimoires: [],
-        souls: [],
-        spirits: []
-    };
+Hooks.once("ready", async () => {
+  console.log("Chronicle Weaver | Ready!");
 
-    // Add SoulManager helper
-    game.chronicleWeaver.soulManager = {
-        updateFromActor: async (actor) => {
-            console.log(`Chronicle Weaver | Syncing Soul for ${actor.name}`);
-            const souls = game.chronicleWeaver.souls;
-            const existingIndex = souls.findIndex(s => s.foundry_actor_id === actor.id);
+  game.chronicleWeaver = {
+    chatService: new ChatService(),
+    learningService: new LearningService(),
+    models: { Grimoire, Soul, Spirit },
+    grimoires: [],
+    souls: [],
+    spirits: [],
+  };
 
-            if (actor.getFlag(MODULE_ID, 'isPC')) {
-                let soul;
-                // Preserve existing ID if updating, generate new one only for new entries
-                if (existingIndex >= 0) {
-                    soul = souls[existingIndex];
-                } else {
-                    soul = new Soul({ id: foundry.utils.randomID(), foundry_actor_id: actor.id });
-                    souls.push(soul);
-                }
+  game.chronicleWeaver.soulManager = {
+    updateFromActor: async actor => {
+      console.log(`Chronicle Weaver | Syncing Soul for ${actor.name}`);
+      const souls = game.chronicleWeaver.souls;
+      const existing = souls.findIndex(s => s.foundry_actor_id === actor.id);
 
-                // Use the full sync method to populate all fields
-                soul.syncFromActor(actor);
-
-                // Save
-                await game.settings.set(MODULE_ID, 'data_souls', souls.map(s => s.toJSON()));
-            } else {
-                // Remove
-                if (existingIndex >= 0) {
-                    souls.splice(existingIndex, 1);
-                    await game.settings.set(MODULE_ID, 'data_souls', souls.map(s => s.toJSON()));
-                }
-            }
+      if (actor.getFlag(MODULE_ID, "isPC")) {
+        let soul;
+        if (existing >= 0) {
+          soul = souls[existing];
+        } else {
+          soul = new Soul({ id: foundry.utils.randomID(), foundry_actor_id: actor.id });
+          souls.push(soul);
         }
-    };
+        soul.syncFromActor(actor);
+        await game.settings.set(MODULE_ID, "data_souls", souls.map(s => s.toJSON()));
+      } else if (existing >= 0) {
+        souls.splice(existing, 1);
+        await game.settings.set(MODULE_ID, "data_souls", souls.map(s => s.toJSON()));
+      }
+    },
+  };
 
-    await loadData();
+  await loadData();
 
-    // Auto-respond to chat messages
-    Hooks.on('createChatMessage', async (message, options, userId) => {
-        if (userId !== game.user.id) return;
+  // ---------------------------------------------------------------------------
+  // Auto-weave: respond to new chat messages.
+  // ---------------------------------------------------------------------------
+  Hooks.on("createChatMessage", async (message, _options, userId) => {
+    if (userId !== game.user.id) return;
+    if (!game.settings.get(MODULE_ID, "autoWeave")) return;
+    if (message.getFlag(MODULE_ID, "isAI")) return;
 
-        const autoWeave = game.settings.get(MODULE_ID, 'autoWeave');
-        if (!autoWeave) return;
+    const skipTypes = new Set(["roll", "whisper"]);
+    if (skipTypes.has(message.type)) return;
+    if (!message.speaker?.alias && message.rolls?.length > 0) return;
 
-        // Check if message is from AI
-        if (message.getFlag(MODULE_ID, 'isAI')) return;
+    const activeSpiritId = game.settings.get(MODULE_ID, "activeSpirit");
+    const activeSpirit = game.chronicleWeaver.spirits.find(s => s.id === activeSpiritId);
 
-        // Guard: skip rolls and system messages in a v11–v13 compatible way
-        const skipTypes = ['roll', 'whisper'];
-        if (skipTypes.includes(message.type)) return;
-        // Also skip pure rolls that lack a speaker alias (system messages)
-        if (!message.speaker?.alias && message.rolls?.length > 0) return;
+    const activeSouls = game.chronicleWeaver.souls.filter(
+      s => s.foundry_actor_id && game.actors.has(s.foundry_actor_id)
+    );
 
-        // Setup Context
-        const activeSpiritId = game.settings.get(MODULE_ID, 'activeSpirit');
-        const activeSpirit = game.chronicleWeaver.spirits.find(s => s.id === activeSpiritId);
+    const historyDepth = game.settings.get(MODULE_ID, "historyDepth");
+    const SKIP_HISTORY_TYPES = new Set(["roll", "whisper", "other"]);
 
-        const activeSouls = game.chronicleWeaver.souls.filter(s => {
-            if (!s.foundry_actor_id) return false;
-            return game.actors.get(s.foundry_actor_id) !== undefined;
-        });
+    const history = game.messages.contents
+      .filter(m => m.id !== message.id && !SKIP_HISTORY_TYPES.has(m.type))
+      .slice(-historyDepth)
+      .map(m => ({
+        role: m.getFlag(MODULE_ID, "isAI") ? "assistant" : "user",
+        content: `${m.speaker.alias ?? "Unknown"}: ${stripHtml(m.content)}`,
+      }));
 
-        // Build history
-        const historyDepth = game.settings.get(MODULE_ID, 'historyDepth');
-        const SKIP_HISTORY_TYPES = new Set(['roll', 'whisper', 'other']);
-        const history = game.messages.contents
-            .filter(m => m.id !== message.id && !SKIP_HISTORY_TYPES.has(m.type))
-            .slice(-historyDepth)
-            .map(m => ({
-                role: m.getFlag(MODULE_ID, 'isAI') ? 'assistant' : 'user',
-                content: `${m.speaker.alias || 'Unknown'}: ${stripHtml(m.content)}`
-            }));
-
-        const prompt = `${message.speaker.alias || 'User'}: ${stripHtml(message.content)}`;
-
-        const response = await game.chronicleWeaver.chatService.generateResponse(prompt, {
-            spirit: activeSpirit,
-            grimoires: game.chronicleWeaver.grimoires,
-            souls: activeSouls,
-            history: history
-        });
-
-        if (response) {
-            const aiName = activeSpirit ? activeSpirit.name : "Narrator";
-            try {
-                await ChatMessage.create({
-                    content: response,
-                    speaker: { alias: aiName },
-                    type: CONST.CHAT_MESSAGE_STYLES?.OTHER ?? CONST.CHAT_MESSAGE_TYPES?.OTHER ?? 0,
-                    flags: {
-                        [MODULE_ID]: { isAI: true }
-                    }
-                });
-            } catch (err) {
-                console.error("Chronicle Weaver | Failed to post AI message:", err);
-                ui.notifications.error("Chronicle Weaver: Failed to post AI response to chat.");
-            }
-        }
+    const prompt = `${message.speaker.alias ?? "User"}: ${stripHtml(message.content)}`;
+    const response = await game.chronicleWeaver.chatService.generateResponse(prompt, {
+      spirit: activeSpirit,
+      grimoires: game.chronicleWeaver.grimoires,
+      souls: activeSouls,
+      history,
     });
 
-    // Register chat commands
-    Hooks.on('chatMessage', handleChatCommand);
-}); // End of Hooks.once('ready')
+    if (!response) return;
+
+    const aiName = activeSpirit?.name ?? "Narrator";
+    try {
+      await ChatMessage.create({
+        content: response,
+        speaker: { alias: aiName },
+        type: CONST.CHAT_MESSAGE_STYLES?.OTHER ?? CONST.CHAT_MESSAGE_TYPES?.OTHER ?? 0,
+        flags: { [MODULE_ID]: { isAI: true } },
+      });
+    } catch (err) {
+      console.error("Chronicle Weaver | Failed to post AI message:", err);
+      ui.notifications.error("Chronicle Weaver: Failed to post AI response to chat.");
+    }
+  });
+
+  Hooks.on("chatMessage", handleChatCommand);
+});
+
+// =============================================================================
+// Data loading
+// =============================================================================
 
 async function loadData() {
-    console.log("Chronicle Weaver | Loading data from settings...");
-
-    // SPIRITS (AI Personas) - was data_spirits
-    let spiritData = game.settings.get(MODULE_ID, 'data_spirits');
-    game.chronicleWeaver.spirits = spiritData.map(d => new Spirit(d));
-
-    // SOULS (PC Personas) - renamed from 'data_spirits' to 'data_souls' in v2
-    let soulData = game.settings.get(MODULE_ID, 'data_souls');
-    game.chronicleWeaver.souls = soulData.map(d => new Soul(d));
-
-    // GRIMOIRES
-    let grimoireData = game.settings.get(MODULE_ID, 'data_grimoires');
-    game.chronicleWeaver.grimoires = grimoireData.map(d => new Grimoire(d));
-
-    console.log(`Chronicle Weaver | Loaded ${game.chronicleWeaver.spirits.length} Spirits (AI), ${game.chronicleWeaver.souls.length} Souls (PC), ${game.chronicleWeaver.grimoires.length} Grimoires.`);
+  console.log("Chronicle Weaver | Loading data from settings…");
+  game.chronicleWeaver.spirits = game.settings.get(MODULE_ID, "data_spirits").map(d => new Spirit(d));
+  game.chronicleWeaver.souls = game.settings.get(MODULE_ID, "data_souls").map(d => new Soul(d));
+  game.chronicleWeaver.grimoires = game.settings.get(MODULE_ID, "data_grimoires").map(d => new Grimoire(d));
+  console.log(
+    `Chronicle Weaver | Loaded ${game.chronicleWeaver.spirits.length} Spirits, ` +
+    `${game.chronicleWeaver.souls.length} Souls, ` +
+    `${game.chronicleWeaver.grimoires.length} Grimoires.`
+  );
 }
+
+// =============================================================================
+// Settings registration
+// =============================================================================
 
 function registerSettings() {
-    game.settings.register(MODULE_ID, 'autoWeave', {
-        name: 'Auto-Weaving',
-        hint: 'If enabled, the AI will automatically reply to chat messages.',
-        scope: 'client',
-        config: true,
-        type: Boolean,
-        default: true
-    });
+  game.settings.register(MODULE_ID, "autoWeave", {
+    name: "Auto-Weaving", hint: "If enabled, the AI will automatically reply to chat messages.",
+    scope: "client", config: true, type: Boolean, default: true,
+  });
+  game.settings.register(MODULE_ID, "supportedSheetClasses", {
+    name: "Supported Sheet Classes",
+    hint: "Comma-separated sheet class names to target for the PC toggle button.",
+    scope: "world", config: true, type: String,
+    default: "CharacterActorSheet, ActorSheet5eCharacter2, ActorSheet5eCharacter",
+  });
+  game.settings.register(MODULE_ID, "ollamaUrl", {
+    name: "Ollama URL", hint: 'URL where Ollama is running (e.g. "http://localhost:11434").',
+    scope: "world", config: true, type: String, default: "http://localhost:11434",
+  });
+  game.settings.register(MODULE_ID, "ollamaModel", {
+    name: "Reader / Chat Model", hint: 'Model used for chat. Use "Manage Souls & Grimoires" to select.',
+    scope: "world", config: true, type: String, default: "llama2:7b",
+  });
+  game.settings.register(MODULE_ID, "coderModel", {
+    name: "Coder Model", hint: 'Model for JSON structuring. Use "Manage Souls & Grimoires" to select.',
+    scope: "world", config: true, type: String, default: "qwen2.5-coder:7b",
+  });
+  game.settings.register(MODULE_ID, "lastProcessedMessageId", {
+    scope: "world", config: false, type: String, default: "",
+  });
+  game.settings.register(MODULE_ID, "historyDepth", {
+    name: "Conversation History Depth", hint: "How many recent messages to include in AI context.",
+    scope: "world", config: true, type: Number, default: 10,
+    range: { min: 5, max: 30, step: 5 },
+  });
+  game.settings.register(MODULE_ID, "pending_entries", { scope: "world", config: false, type: Array, default: [] });
+  game.settings.register(MODULE_ID, "activeSpirit", { name: "Active Spirit", hint: "The Spirit currently narrating.", scope: "world", config: true, type: String, default: "", onChange: v => console.log("Chronicle Weaver | Active Spirit:", v) });
+  game.settings.register(MODULE_ID, "data_spirits", { scope: "world", config: false, type: Array, default: [] });
+  game.settings.register(MODULE_ID, "data_souls", { scope: "world", config: false, type: Array, default: [] });
+  game.settings.register(MODULE_ID, "data_grimoires", { scope: "world", config: false, type: Array, default: [] });
+  game.settings.register(MODULE_ID, "ollamaContextModels", { scope: "world", config: false, type: Array, default: [] });
 
-    game.settings.register(MODULE_ID, 'supportedSheetClasses', {
-        name: 'Supported Sheet Classes',
-        hint: 'Comma-separated list of sheet class names (e.g. ActorSheet5eCharacter, CharacterActorSheet) to target for buttons if they don\'t appear automatically.',
-        scope: 'world',
-        config: true,
-        type: String,
-        default: 'CharacterActorSheet, ActorSheet5eCharacter2, ActorSheet5eCharacter'
-    });
-
-    game.settings.register(MODULE_ID, 'ollamaUrl', {
-        name: 'Ollama URL',
-        hint: 'URL where Ollama is running. use "Manage Souls & Grimoires" above to Test Connection.',
-        scope: 'world',
-        config: false,
-        type: String,
-        default: 'http://localhost:11434'
-    });
-
-    game.settings.register(MODULE_ID, 'ollamaModel', {
-        name: 'Reader/Main Model',
-        hint: 'Model used for chat. Use "Manage Souls & Grimoires" to select from list.',
-        scope: 'world',
-        config: false,
-        type: String,
-        default: 'llama2:7b'
-    });
-
-    game.settings.register(MODULE_ID, 'coderModel', {
-        name: 'Coder Model',
-        hint: 'Model used for data. Use "Manage Souls & Grimoires" to select from list.',
-        scope: 'world',
-        config: false,
-        type: String,
-        default: 'qwen2.5-coder:7b'
-    });
-
-    game.settings.register(MODULE_ID, 'lastProcessedMessageId', {
-        scope: 'world',
-        config: false,
-        type: String,
-        default: ''
-    });
-
-    game.settings.register(MODULE_ID, 'historyDepth', {
-        name: 'Conversation History Depth',
-        hint: 'How many recent messages to include in AI context (default 10)',
-        scope: 'world',
-        config: true,
-        type: Number,
-        default: 10,
-        range: { min: 5, max: 30, step: 5 }
-    });
-
-    game.settings.register(MODULE_ID, 'pending_entries', {
-        scope: 'world',
-        config: false,
-        type: Array,
-        default: []
-    });
-
-    game.settings.register(MODULE_ID, 'activeSpirit', { // AI Persona
-        name: 'Active Spirit',
-        hint: 'The Spirit currently controlling the AI narrator.',
-        scope: 'world',
-        config: false,
-        type: String,
-        default: '',
-        onChange: value => {
-            console.log("Chronicle Weaver | Active Spirit changed to:", value);
-        }
-    });
-
-    // Data Settings
-    game.settings.register(MODULE_ID, 'data_spirits', { // AI Personas 
-        scope: 'world',
-        config: false,
-        type: Array,
-        default: []
-    });
-
-    game.settings.register(MODULE_ID, 'data_souls', { // PC Personas
-        scope: 'world',
-        config: false,
-        type: Array,
-        default: []
-    });
-
-    game.settings.register(MODULE_ID, 'data_grimoires', {
-        scope: 'world',
-        config: false,
-        type: Array,
-        default: []
-    });
-
-    game.settings.register(MODULE_ID, 'ollamaContextModels', {
-        scope: 'world',
-        config: false,
-        type: Array,
-        default: []
-    });
-
-    game.settings.registerMenu(MODULE_ID, "config", {
-        name: "Chronicle Weaver Management",
-        label: "Manage Souls & Grimoires",
-        hint: "Configure your Grimoires, Souls, and Spirits.",
-        icon: "fas fa-book-spells",
-        type: ChronicleWeaverConfig,
-        restricted: true
-    });
+  game.settings.registerMenu(MODULE_ID, "config", {
+    name: "Chronicle Weaver Management", label: "Manage Souls & Grimoires",
+    hint: "Configure Grimoires, Souls, and Spirits.",
+    icon: "fas fa-book-spells", type: ChronicleWeaverConfig, restricted: true,
+  });
 }
 
-function handleChatCommand(chatLog, message, chatData) {
-    const msg = message.trim();
+// =============================================================================
+// Chat command handler
+// =============================================================================
 
-    if (msg.startsWith('/cw reset')) {
-        game.settings.set(MODULE_ID, 'lastProcessedMessageId', '')
-            .then(() => game.settings.set(MODULE_ID, 'pending_entries', []))
-            .then(() => ui.notifications.info("Chronicle Weaver: Reset complete. Learning marker and pending entries cleared."))
-            .catch(err => {
-                console.error("Chronicle Weaver | Reset failed:", err);
-                ui.notifications.error("Chronicle Weaver: Reset failed. Please try again.");
-            });
-        return false;
-    }
+/**
+ * Handles `/cw` slash commands entered in the chat box.
+ *
+ * @param {ChatLog} _chatLog - The chat log instance (unused).
+ * @param {string}  message  - The raw message string.
+ * @returns {boolean} `false` suppresses the message from appearing in chat.
+ */
+function handleChatCommand(_chatLog, message) {
+  const msg = message.trim();
 
-    if (msg.startsWith('/cw learn')) {
-        // Trigger learning manually
-        ui.notifications.info("Chronicle Weaver: Starting learning process...");
-        if (game.chronicleWeaver.learningService) {
-            game.chronicleWeaver.learningService.learnFromChat().catch(err => {
-                console.error("Chronicle Weaver | learnFromChat failed:", err);
-                ui.notifications.error("Chronicle Weaver: Learning process encountered an unexpected error. Check the console.");
-            });
-        }
-        return false;
-    }
+  if (msg.startsWith("/cw reset")) {
+    game.settings.set(MODULE_ID, "lastProcessedMessageId", "")
+      .then(() => game.settings.set(MODULE_ID, "pending_entries", []))
+      .then(() => ui.notifications.info("Chronicle Weaver: Reset complete."))
+      .catch(err => {
+        console.error("Chronicle Weaver | Reset failed:", err);
+        ui.notifications.error("Chronicle Weaver: Reset failed. Please try again.");
+      });
+    return false;
+  }
 
-    return true;
+  if (msg.startsWith("/cw learn")) {
+    ui.notifications.info("Chronicle Weaver: Starting learning process…");
+    game.chronicleWeaver.learningService.learnFromChat().catch(err => {
+      console.error("Chronicle Weaver | learnFromChat failed:", err);
+      ui.notifications.error("Chronicle Weaver: Learning process failed. Check the console.");
+    });
+    return false;
+  }
+
+  return true;
 }
 
+// =============================================================================
+// Utility — HTML stripping
+// =============================================================================
+
+/**
+ * Strips HTML tags and decodes common entities from a string.
+ *
+ * @param {string} html - Raw HTML string.
+ * @returns {string} Plain text.
+ */
 function stripHtml(html) {
-    return html?.replace(/<[^>]*>/gm, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').trim() || '';
+  return (html ?? "")
+    .replace(/<[^>]*>/gm, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .trim();
 }
 
+// =============================================================================
+// Coloured dialogue — text-node processor
+// =============================================================================
+
+/**
+ * HTML-escapes a plain-text string before it is interpolated into innerHTML.
+ * Prevents bare `<` / `>` characters in AI dialogue from being parsed as
+ * HTML markup and breaking the chat card's DOM structure (Bug 4 fix).
+ *
+ * @param {string} str - Raw captured string from a text node.
+ * @returns {string} HTML-safe string.
+ */
+function escHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Recursively walks DOM nodes inside `.message-content`, replacing
+ * `**bold**`, `*italic*`, and `"speech"` patterns with styled spans.
+ *
+ * Bug 3 fix: Italic asterisks are now stripped before wrapping in markup
+ *   (`*text*` → `<em>text</em>` — the original code left the `*` visible).
+ * Bug 4 fix: All captured text is HTML-escaped before innerHTML assignment.
+ *
+ * @param {Node} node - A DOM node (text or element) to process.
+ */
+function processTextNodes(node) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.nodeValue ?? "";
+
+    // 1. Pre-escape the entire text to prevent XSS (Bug 4 fix).
+    //    We do this *before* applying our own markup, so that any <script> tags
+    //    in the original text are neutralized but our own <span> tags are safe.
+    const safeText = escHtml(text);
+
+    // Matches:
+    // 1. **Bold** (often used for actions in some models, or emphasis)
+    // 2. *Italic* (standard actions)
+    // 3. "Speech" (including ”smart quotes“)
+    const regex = /(\*\*[^*]+\*\*)|(\*[^*]+\*)|(["\u201C\u201D][^"\u201C\u201D]+["\u201C\u201D])/g;
+
+    let newHtml = safeText;
+
+    // 2. Apply Markdown formatting if present.
+    //    Note: we run this on the *escaped* text, so we don't need to escape inside.
+    //    Removed regex.test() check to avoid lastIndex pitfalls and simplify.
+    newHtml = safeText.replace(regex, (match, bold, italic, speech) => {
+      // Debug log to confirm we are catching things
+      // console.log("Chronicle Weaver | Formatting match:", match);
+
+      if (bold) {
+        const inner = bold.replace(/\*\*/g, ""); // Already escaped
+        const isHeader = bold.includes(":");
+        const markup = `<strong><span class="cw-action">${inner}</span></strong>`;
+        return isHeader ? `<br/><br/>${markup} ` : markup;
+      }
+      if (italic) {
+        const inner = italic.replace(/^\*|\*$/g, ""); // Already escaped
+        const isHeader = italic.includes(":");
+        const markup = `<em><span class="cw-action">${inner}</span></em>`;
+        return isHeader ? `<br/><br/>${markup} ` : markup;
+      }
+      if (speech) {
+        return `<span class="cw-speech">${speech}</span>`; // Already escaped
+      }
+      return match;
+    });
+
+    // 3. Convert newlines to breaks for readability.
+    if (newHtml.includes("\n")) {
+      newHtml = newHtml.replace(/\n/g, "<br/>");
+    }
+
+    // Optimization: If nothing changed (no markdown, no newlines), avoid DOM thrashing.
+    // BUT checking equality against `text` is tricky because we escaped it.
+    // So we check against `safeText`? No, if safeText != text, we MUST update (to show escaping).
+    // If safeText == text (no special chars) and no markdown/newlines, we can skip.
+    if (newHtml === text) return;
+
+    const span = document.createElement("span");
+    span.innerHTML = newHtml;
+    node.parentNode?.replaceChild(span, node);
+
+  } else if (node.nodeType === Node.ELEMENT_NODE) {
+    // Skip already-processed CW spans to prevent double-processing on re-render.
+    if (node.classList.contains("cw-action") || node.classList.contains("cw-speech")) return;
+    Array.from(node.childNodes).forEach(processTextNodes);
+  }
+}

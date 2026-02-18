@@ -1,27 +1,72 @@
-<div class="chronicle-weaver-review">
-    <header>
-        <h1>Review Learned Lore</h1>
-        <p>Review facts extracted by the AI before adding them to your Grimoire.</p>
-    </header>
+{{!--
+  templates/review-queue.html
+  Chronicle Weaver — GM Review Queue
 
-    <div class="review-list">
-        {{#each pending as |entry index|}}
-        <div class="review-item" data-id="{{entry.id}}">
-            <div class="review-header">
-                <strong>Keys:</strong>
-                <input type="text" name="keys" value="{{entry.keysDisplay}}" />
-            </div>
-            <div class="review-body">
-                <textarea name="content" rows="3">{{entry.content}}</textarea>
-            </div>
-            <div class="review-actions">
-                <button type="button" class="approve" title="Add to Learned Lore Grimoire"><i class="fas fa-check"></i>
-                    Approve</button>
-                <button type="button" class="reject" title="Discard"><i class="fas fa-times"></i> Reject</button>
-            </div>
+  V13 notes:
+  - Approve / Reject buttons use `data-action` bound to static action handlers
+    in ReviewQueueApp.DEFAULT_OPTIONS.actions.
+  - ApplicationV2 dispatches `data-action` with (event, target) — no
+    activateListeners or jQuery needed.
+  - Each `.review-item` carries `data-id` so the action handler can identify
+    the correct pending entry without relying on DOM traversal order.
+--}}
+
+<div class="chronicle-weaver-review">
+
+  <header class="cw-queue-header">
+    <h2><i class="fas fa-inbox"></i> Review Learned Lore</h2>
+    <p class="notes">
+      Inspect facts extracted by the AI from your chat log.
+      Edit the keywords and description, then <strong>Approve</strong> to add to
+      the Learned Lore Grimoire, or <strong>Reject</strong> to discard permanently.
+    </p>
+  </header>
+
+  <div class="review-list">
+
+    {{#each pending as |entry|}}
+      <div class="review-item" data-id="{{entry.id}}">
+
+        <div class="review-header">
+          <label class="cw-label">
+            <i class="fas fa-tags"></i> Keywords
+            <span class="notes">(comma-separated)</span>
+          </label>
+          <input type="text" name="keys" value="{{entry.keysDisplay}}"
+                 placeholder="dragon, Aldric, Thornwall Keep…">
         </div>
-        {{else}}
-        <p class="no-pending">No pending entries to review.</p>
-        {{/each}}
-    </div>
+
+        <div class="review-body">
+          <label class="cw-label"><i class="fas fa-scroll"></i> Description</label>
+          <textarea name="content" rows="3" placeholder="Enter a factual lore description…">{{entry.content}}</textarea>
+        </div>
+
+        {{#if entry.source}}
+          <div class="review-meta">
+            <span class="cw-badge">{{entry.source}}</span>
+            {{#if entry.confidence}}
+              <span class="cw-badge cw-confidence">confidence: {{entry.confidence}}</span>
+            {{/if}}
+          </div>
+        {{/if}}
+
+        <div class="review-actions">
+          <button type="button" data-action="approve" title="Add to Learned Lore Grimoire">
+            <i class="fas fa-check"></i> Approve
+          </button>
+          <button type="button" data-action="reject" title="Discard this entry permanently">
+            <i class="fas fa-times"></i> Reject
+          </button>
+        </div>
+
+      </div>
+    {{else}}
+      <div class="cw-empty-queue">
+        <i class="fas fa-check-circle"></i>
+        <p>No pending entries. Run <code>/cw learn</code> to analyse recent chat history.</p>
+      </div>
+    {{/each}}
+
+  </div>
+
 </div>

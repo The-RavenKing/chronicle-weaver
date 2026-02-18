@@ -1,196 +1,249 @@
-/* ---------------------------------------------------- */
-/* Theme Variables (Gothic Fantasy)                    */
-/* ---------------------------------------------------- */
-:root {
-    --cw-parchment: #e3dac9;
-    /* Darker, aged parchment */
-    --cw-parchment-dark: #d4c5a9;
-    --cw-ink: #1a0f0f;
-    /* Near black with red tint */
-    --cw-gold: #c5a059;
-    /* Antique Gold */
-    --cw-gold-dim: #8a6d3b;
-    --cw-red: #800000;
-    /* Blood Red */
-    --cw-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
-    /* Heavier shadows */
-    --cw-font-header: "Modesto Condensed", "Georgia", serif;
-    --cw-font-body: "Signika", "Segoe UI", sans-serif;
-}
+/* =============================================================================
+   Chronicle Weaver — Stylesheet  v3.0.0
+   Foundry VTT v12–v13 (ApplicationV2 layout)
+   ============================================================================= */
 
-/* ---------------------------------------------------- */
-/* Config Window Structure                              */
-/* ---------------------------------------------------- */
-.chronicle-weaver-config {
-    background: url('../assets/parchment.jpg'), var(--cw-parchment);
-    /* Fallback color */
-    background-size: cover;
-    color: var(--cw-ink);
-    font-family: var(--cw-font-body);
-}
-
-.chronicle-weaver-config .window-content {
-    background: transparent !important;
-    /* Let parchment show through */
-    padding: 15px;
-}
-
-.chronicle-weaver-config h1,
-.chronicle-weaver-config h2 {
-    font-family: var(--cw-font-header);
-    color: var(--cw-ink);
-    border-bottom: 2px solid var(--cw-gold);
-    padding-bottom: 5px;
-    margin-bottom: 15px;
-    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-.chronicle-weaver-config .notes {
-    font-style: italic;
-    color: #554433;
-    font-size: 0.9em;
-}
-
-/* ---------------------------------------------------- */
-/* Form Elements                                        */
-/* ---------------------------------------------------- */
-.chronicle-weaver-config input[type="text"],
-.chronicle-weaver-config input[type="number"],
-.chronicle-weaver-config select,
-.chronicle-weaver-config textarea {
-    background: rgba(255, 255, 255, 0.4);
-    border: 1px solid var(--cw-gold-dim);
-    border-radius: 4px;
-    color: var(--cw-ink);
-    font-family: var(--cw-font-body);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
-    transition: all 0.2s ease;
-}
-
-.chronicle-weaver-config input:focus,
-.chronicle-weaver-config select:focus,
-.chronicle-weaver-config textarea:focus {
-    background: rgba(255, 255, 255, 0.8);
-    border-color: var(--cw-gold);
-    box-shadow: 0 0 5px var(--cw-gold);
-}
-
-/* Buttons */
-.chronicle-weaver-config button {
-    background: var(--cw-parchment-dark);
-    border: 1px solid var(--cw-gold);
-    color: var(--cw-ink);
-    font-family: var(--cw-font-header);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: all 0.2s;
-}
-
-.chronicle-weaver-config button:hover {
-    background: var(--cw-gold);
-    color: #fff;
-    text-shadow: 1px 1px 0 #000;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    transform: translateY(-1px);
-}
-
-/* ---------------------------------------------------- */
-/* Tabs                                                 */
-/* ---------------------------------------------------- */
-.chronicle-weaver-config .sheet-tabs {
-    border-bottom: 2px solid var(--cw-gold);
-    margin-bottom: 15px;
-}
-
-.chronicle-weaver-config .sheet-tabs .item {
-    font-family: var(--cw-font-header);
-    font-size: 1.2em;
-    color: var(--cw-ink);
-    border: none;
-    background: transparent;
-    opacity: 0.6;
-    transition: all 0.2s;
-}
-
-.chronicle-weaver-config .sheet-tabs .item.active {
-    opacity: 1;
-    text-shadow: 0 0 10px var(--cw-gold);
-    border-bottom: 3px solid var(--cw-red);
-}
-
-.chronicle-weaver-config .sheet-tabs .item:hover {
-    color: var(--cw-red);
-    opacity: 1;
-}
-
-/* ---------------------------------------------------- */
-/* Cards (Spirits / Souls / Grimoires)                  */
-/* ---------------------------------------------------- */
-.chronicle-weaver-config .item-list {
-    list-style: none;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 10px;
-}
-
-.chronicle-weaver-config .item-list .item {
-    background: white;
-    /* Clean card background */
-    border: 1px solid var(--cw-gold-dim);
-    border-radius: 6px;
-    padding: 10px;
-    display: flex;
-    /* Override flexrow from foundry default if needed, ensure alignment */
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.chronicle-weaver-config .item-list .item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-    border-color: var(--cw-gold);
-}
-
-.chronicle-weaver-config .item-list .item-name strong {
-    font-family: var(--cw-font-header);
-    font-size: 1.1em;
-    color: var(--cw-red);
-}
-
-.chronicle-weaver-config .item-controls a {
-    color: var(--cw-gold-dim);
-    margin-left: 5px;
-    transition: color 0.2s;
-}
-
-.chronicle-weaver-config .item-controls a:hover {
-    color: var(--cw-red);
-    text-shadow: 0 0 5px rgba(139, 0, 0, 0.3);
-}
-
-/* ---------------------------------------------------- */
-/* Chat Message Styling                                 */
-/* ---------------------------------------------------- */
+/* -----------------------------------------------------------------------------
+   Chat message formatting
+   ----------------------------------------------------------------------------- */
 .chronicle-message {
-    margin: 10px 0;
-    padding: 10px;
-    border-radius: 4px;
-    background: rgba(0, 0, 0, 0.03);
-    border-left: 4px solid var(--cw-gold);
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 4px;
 }
 
-/* Feature: Speech Formatting */
+.chronicle-question {
+  background: rgba(100, 150, 255, 0.1);
+  border-left: 3px solid #6496ff;
+}
+
+.chronicle-response {
+  background: rgba(255, 100, 100, 0.1);
+  border-left: 3px solid #ff6464;
+}
+
+/* Speech & Action markdown formatting */
 .cw-speech {
-    font-weight: bold;
-    /* Color handled by default text color */
+  font-weight: bold;
 }
 
 .cw-action {
-    font-style: italic;
-    color: #666666;
-    /* Keep readable gray even in fantasy theme */
+  font-style: italic;
+  color: #666;
+}
+
+/* Enforce line breaks / paragraphs in AI messages */
+.cw-message .message-content {
+  white-space: pre-wrap !important;
+  line-height: 1.4em;
+}
+
+/* -----------------------------------------------------------------------------
+   Config window — root layout
+   ----------------------------------------------------------------------------- */
+.chronicle-weaver-config {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px 12px;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.chronicle-weaver-config .cw-settings-bar {
+  flex: 0 0 auto;
+}
+
+.chronicle-weaver-config .sheet-tabs {
+  flex: 0 0 30px;
+  border-bottom: 1px solid var(--color-border-dark, #787878);
+  margin-bottom: 6px;
+}
+
+.chronicle-weaver-config .content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.chronicle-weaver-config .sheet-footer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--color-border-dark, #787878);
+  padding-top: 6px;
+  margin-top: 4px;
+}
+
+/* Item list (shared: spirits / souls / grimoires) */
+.chronicle-weaver-config .item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chronicle-weaver-config .item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--color-border-light, #c9c7b8);
+}
+
+.chronicle-weaver-config .item:last-child {
+  border-bottom: none;
+}
+
+.chronicle-weaver-config .item-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.chronicle-weaver-config .item-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.chronicle-weaver-config .item-controls a {
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.chronicle-weaver-config .item-controls a:hover {
+  opacity: 1;
+}
+
+/* Accent colour swatch dot */
+.cw-color-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+/* Secondary meta text (class/level, entry count) */
+.cw-meta {
+  font-size: 0.82em;
+  color: var(--color-text-dark-secondary, #666);
+  margin-left: 4px;
+}
+
+.chronicle-weaver-config h2 .subtitle {
+  font-size: 0.7em;
+  font-weight: normal;
+  color: var(--color-text-dark-secondary, #666);
+}
+
+.chronicle-weaver-config .cw-empty {
+  color: var(--color-text-dark-secondary, #888);
+  font-style: italic;
+  padding: 8px 4px;
+  justify-content: center;
+}
+
+.chronicle-weaver-config .action-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+/* -----------------------------------------------------------------------------
+   Review Queue window
+   ----------------------------------------------------------------------------- */
+.chronicle-weaver-review {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+.cw-queue-header {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--color-border-dark, #787878);
+  padding-bottom: 6px;
+}
+
+.cw-queue-header h2 {
+  margin: 0 0 4px;
+  font-size: 1.1em;
+}
+
+.chronicle-weaver-review .review-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chronicle-weaver-review .review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--color-border-light, #c9c7b8);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.chronicle-weaver-review .review-item input[name="keys"],
+.chronicle-weaver-review .review-item textarea[name="content"] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cw-label {
+  display: block;
+  font-weight: bold;
+  font-size: 0.85em;
+  margin-bottom: 2px;
+}
+
+.review-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.cw-badge {
+  display: inline-block;
+  font-size: 0.75em;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--color-bg-btn, rgba(0, 0, 0, 0.08));
+  color: var(--color-text-dark-secondary, #555);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cw-confidence {
+  background: rgba(100, 180, 100, 0.15);
+  color: #2a6a2a;
+}
+
+.review-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.cw-empty-queue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: var(--color-text-dark-secondary, #888);
+  gap: 8px;
+  text-align: center;
+}
+
+.cw-empty-queue i {
+  font-size: 2em;
+  opacity: 0.4;
 }
