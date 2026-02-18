@@ -43,11 +43,11 @@
         <p class="notes">Used for structuring JSON data (recommend `qwen2.5-coder` or similar).</p>
     </div>
 
-    <hr>
+    <hr class="cw-divider">
 
     <nav class="sheet-tabs tabs" data-group="primary">
-        <a class="item" data-tab="spirits"><i class="fas fa-ghost"></i> Spirits (AI Personas)</a>
-        <a class="item" data-tab="souls"><i class="fas fa-users"></i> Souls (Players)</a>
+        <a class="item" data-tab="spirits"><i class="fas fa-ghost"></i> Spirits</a>
+        <a class="item" data-tab="souls"><i class="fas fa-users"></i> Souls</a>
         <a class="item" data-tab="grimoires"><i class="fas fa-book-journal-whills"></i> Grimoires</a>
     </nav>
 
@@ -55,7 +55,8 @@
         <!-- SPIRITS TAB (AI Personas) -->
         <div class="tab" data-tab="spirits">
             <h2>Spirits of the Weaver (AI Personas)</h2>
-            <p class="notes">These are the personalities the AI can adopt (e.g., The Narrator, A Mysterious Merchant).</p>
+            <p class="notes">These are the personalities the AI can adopt (e.g., The Narrator, A Mysterious Merchant).
+            </p>
 
             <div class="form-group">
                 <label>Active Spirit</label>
@@ -70,12 +71,11 @@
                 </div>
                 <p class="notes">Select which Spirit currently listens to chat and responds.</p>
             </div>
-            <hr>
+            <hr class="cw-divider">
             <div class="action-bar flexrow">
-                <button type="button" class="item-create" data-type="spirit"><i class="fas fa-plus"></i> Create New
-                    Spirit</button>
-                <button type="button" class="import-spirit"><i class="fas fa-file-import"></i> Import JSON
-                    (SillyTavern)</button>
+                <button type="button" class="item-create" data-type="spirit"><i class="fas fa-plus"></i> Create
+                    New</button>
+                <button type="button" class="import-spirit"><i class="fas fa-file-import"></i> Import JSON</button>
                 <input type="file" id="import-spirit-file" accept=".json" style="display:none;">
             </div>
 
@@ -97,12 +97,10 @@
         <!-- SOULS TAB (Player Characters) -->
         <div class="tab" data-tab="souls">
             <h2>Souls (Player Characters)</h2>
-            <p class="notes">These represent Player Characters. Use the checkbox on Actor Sheets to add them here.
-            </p>
+            <p class="notes">These represent Player Characters. Use the checkbox on Actor Sheets to add them here.</p>
 
             <div class="action-bar flexrow">
-                <button type="button" class="import-soul-actor"><i class="fas fa-user-plus"></i> Import from
-                    Actor</button>
+                <button type="button" class="import-soul-actor"><i class="fas fa-user-plus"></i> Import Actor</button>
                 <button type="button" class="import-soul"><i class="fas fa-file-import"></i> Import JSON</button>
                 <input type="file" id="import-soul-file" accept=".json" style="display:none;">
             </div>
@@ -130,10 +128,8 @@
 
             <div class="action-bar flexrow">
                 <button type="button" class="item-create" data-type="grimoire"><i class="fas fa-plus"></i> Create
-                    New
-                    Grimoire</button>
-                <button type="button" class="import-grimoire"><i class="fas fa-file-import"></i> Import
-                    JSON</button>
+                    New</button>
+                <button type="button" class="import-grimoire"><i class="fas fa-file-import"></i> Import JSON</button>
                 <input type="file" id="import-grimoire-file" accept=".json" style="display:none;">
             </div>
 

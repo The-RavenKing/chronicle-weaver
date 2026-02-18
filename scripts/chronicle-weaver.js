@@ -167,6 +167,8 @@ Hooks.once('init', () => {
     // FEATURE: Colored Dialogue (SillyTavern Style)
     // --------------------------------------------------------
     Hooks.on('renderChatMessage', (message, html, data) => {
+        if (!game.chronicleWeaver) return; // Fix Bug 1: Prevent crash if called before ready hook (e.g. during world load)
+
         const speaker = message.speaker;
         if (!speaker.alias) return;
 
@@ -207,24 +209,28 @@ Hooks.once('init', () => {
                 const regex = /(\*\*[^*]+\*\*)|(\*[^*]+\*)|("[^"]+")/g;
 
                 if (regex.test(text)) {
+                    // Helper to escape HTML characters to prevent breakage from AI output (Fix Bug 4)
+                    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
                     const newHtml = text.replace(regex, (match, boldAction, italicAction, speechGroup) => {
                         if (boldAction) {
                             // Handle **Speaker:** -> Bold + Action color
                             // If it ends with ':', it's likely a speaker label -> Add Line Break before
                             const isHeader = boldAction.includes(':');
-                            const content = `<strong><span class="cw-action">${boldAction.replace(/\*\*/g, '')}</span></strong>`;
+                            const content = `<strong><span class="cw-action">${esc(boldAction.replace(/\*\*/g, ''))}</span></strong>`;
                             return isHeader ? `<br/><br/>${content} ` : content;
                         } else if (italicAction) {
                             // Handle *Action* -> Italic + Action color
                             // If it looks like a header (e.g. *Speaker:*), add break
+                            // Fix Bug 3: Strip leading/trailing asterisks
                             const isHeader = italicAction.includes(':');
-                            const content = `<span class="cw-action">${italicAction}</span>`;
+                            const content = `<span class="cw-action">${esc(italicAction.replace(/^\*|\*$/g, ''))}</span>`;
                             return isHeader ? `<br/><br/>${content} ` : content;
                         } else if (speechGroup) {
                             // Handle "Speech" -> Bold (via CSS)
-                            return `<span class="cw-speech">${speechGroup}</span>`;
+                            return `<span class="cw-speech">${esc(speechGroup)}</span>`;
                         }
-                        return match;
+                        return esc(match);
                     });
 
                     const span = document.createElement('span');
@@ -409,7 +415,7 @@ function registerSettings() {
         name: 'Ollama URL',
         hint: 'URL where Ollama is running. use "Manage Souls & Grimoires" above to Test Connection.',
         scope: 'world',
-        config: true,
+        config: false,
         type: String,
         default: 'http://localhost:11434'
     });
@@ -418,7 +424,7 @@ function registerSettings() {
         name: 'Reader/Main Model',
         hint: 'Model used for chat. Use "Manage Souls & Grimoires" to select from list.',
         scope: 'world',
-        config: true,
+        config: false,
         type: String,
         default: 'llama2:7b'
     });
@@ -427,7 +433,7 @@ function registerSettings() {
         name: 'Coder Model',
         hint: 'Model used for data. Use "Manage Souls & Grimoires" to select from list.',
         scope: 'world',
-        config: true,
+        config: false,
         type: String,
         default: 'qwen2.5-coder:7b'
     });
@@ -460,7 +466,7 @@ function registerSettings() {
         name: 'Active Spirit',
         hint: 'The Spirit currently controlling the AI narrator.',
         scope: 'world',
-        config: true,
+        config: false,
         type: String,
         default: '',
         onChange: value => {

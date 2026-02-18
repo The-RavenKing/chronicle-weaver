@@ -475,7 +475,9 @@ export class ChronicleWeaverConfig extends FormApplication {
             personality: data.personality || "",
             scenario: data.scenario || "",
             first_message: data.first_mes || "",
-            system_prompt: data.system_prompt || ""
+            system_prompt: data.system_prompt || "",
+            // Fix Bug 2: Import post_history_instructions (used for reinforcement)
+            post_history_instructions: data.post_history_instructions || ""
         };
     }
 

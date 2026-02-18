@@ -1,55 +1,196 @@
-/* Ollama Storyteller Styles */
+/* ---------------------------------------------------- */
+/* Theme Variables (Gothic Fantasy)                    */
+/* ---------------------------------------------------- */
+:root {
+    --cw-parchment: #e3dac9;
+    /* Darker, aged parchment */
+    --cw-parchment-dark: #d4c5a9;
+    --cw-ink: #1a0f0f;
+    /* Near black with red tint */
+    --cw-gold: #c5a059;
+    /* Antique Gold */
+    --cw-gold-dim: #8a6d3b;
+    --cw-red: #800000;
+    /* Blood Red */
+    --cw-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+    /* Heavier shadows */
+    --cw-font-header: "Modesto Condensed", "Georgia", serif;
+    --cw-font-body: "Signika", "Segoe UI", sans-serif;
+}
+
+/* ---------------------------------------------------- */
+/* Config Window Structure                              */
+/* ---------------------------------------------------- */
+.chronicle-weaver-config {
+    background: url('../assets/parchment.jpg'), var(--cw-parchment);
+    /* Fallback color */
+    background-size: cover;
+    color: var(--cw-ink);
+    font-family: var(--cw-font-body);
+}
+
+.chronicle-weaver-config .window-content {
+    background: transparent !important;
+    /* Let parchment show through */
+    padding: 15px;
+}
+
+.chronicle-weaver-config h1,
+.chronicle-weaver-config h2 {
+    font-family: var(--cw-font-header);
+    color: var(--cw-ink);
+    border-bottom: 2px solid var(--cw-gold);
+    padding-bottom: 5px;
+    margin-bottom: 15px;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.chronicle-weaver-config .notes {
+    font-style: italic;
+    color: #554433;
+    font-size: 0.9em;
+}
+
+/* ---------------------------------------------------- */
+/* Form Elements                                        */
+/* ---------------------------------------------------- */
+.chronicle-weaver-config input[type="text"],
+.chronicle-weaver-config input[type="number"],
+.chronicle-weaver-config select,
+.chronicle-weaver-config textarea {
+    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid var(--cw-gold-dim);
+    border-radius: 4px;
+    color: var(--cw-ink);
+    font-family: var(--cw-font-body);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.chronicle-weaver-config input:focus,
+.chronicle-weaver-config select:focus,
+.chronicle-weaver-config textarea:focus {
+    background: rgba(255, 255, 255, 0.8);
+    border-color: var(--cw-gold);
+    box-shadow: 0 0 5px var(--cw-gold);
+}
+
+/* Buttons */
+.chronicle-weaver-config button {
+    background: var(--cw-parchment-dark);
+    border: 1px solid var(--cw-gold);
+    color: var(--cw-ink);
+    font-family: var(--cw-font-header);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+}
+
+.chronicle-weaver-config button:hover {
+    background: var(--cw-gold);
+    color: #fff;
+    text-shadow: 1px 1px 0 #000;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
+}
+
+/* ---------------------------------------------------- */
+/* Tabs                                                 */
+/* ---------------------------------------------------- */
+.chronicle-weaver-config .sheet-tabs {
+    border-bottom: 2px solid var(--cw-gold);
+    margin-bottom: 15px;
+}
+
+.chronicle-weaver-config .sheet-tabs .item {
+    font-family: var(--cw-font-header);
+    font-size: 1.2em;
+    color: var(--cw-ink);
+    border: none;
+    background: transparent;
+    opacity: 0.6;
+    transition: all 0.2s;
+}
+
+.chronicle-weaver-config .sheet-tabs .item.active {
+    opacity: 1;
+    text-shadow: 0 0 10px var(--cw-gold);
+    border-bottom: 3px solid var(--cw-red);
+}
+
+.chronicle-weaver-config .sheet-tabs .item:hover {
+    color: var(--cw-red);
+    opacity: 1;
+}
+
+/* ---------------------------------------------------- */
+/* Cards (Spirits / Souls / Grimoires)                  */
+/* ---------------------------------------------------- */
+.chronicle-weaver-config .item-list {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 10px;
+}
+
+.chronicle-weaver-config .item-list .item {
+    background: white;
+    /* Clean card background */
+    border: 1px solid var(--cw-gold-dim);
+    border-radius: 6px;
+    padding: 10px;
+    display: flex;
+    /* Override flexrow from foundry default if needed, ensure alignment */
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.chronicle-weaver-config .item-list .item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    border-color: var(--cw-gold);
+}
+
+.chronicle-weaver-config .item-list .item-name strong {
+    font-family: var(--cw-font-header);
+    font-size: 1.1em;
+    color: var(--cw-red);
+}
+
+.chronicle-weaver-config .item-controls a {
+    color: var(--cw-gold-dim);
+    margin-left: 5px;
+    transition: color 0.2s;
+}
+
+.chronicle-weaver-config .item-controls a:hover {
+    color: var(--cw-red);
+    text-shadow: 0 0 5px rgba(139, 0, 0, 0.3);
+}
+
+/* ---------------------------------------------------- */
+/* Chat Message Styling                                 */
+/* ---------------------------------------------------- */
 .chronicle-message {
     margin: 10px 0;
     padding: 10px;
     border-radius: 4px;
-}
-
-.chronicle-question {
-    background: rgba(100, 150, 255, 0.1);
-    border-left: 3px solid #6496ff;
-}
-
-.chronicle-response {
-    background: rgba(255, 100, 100, 0.1);
-    border-left: 3px solid #ff6464;
-}
-
-/* Config Window Styles */
-.chronicle-weaver-config .item-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.chronicle-weaver-config .item {
-    padding: 5px;
-    border-bottom: 1px solid #787878;
-    align-items: center;
-}
-
-.chronicle-weaver-config .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-    border-bottom: 2px solid #000;
-}
-
-.chronicle-weaver-config .tabs {
-    flex: 0 0 30px;
-    border-bottom: 1px solid #787878;
-    margin-bottom: 10px;
+    background: rgba(0, 0, 0, 0.03);
+    border-left: 4px solid var(--cw-gold);
 }
 
 /* Feature: Speech Formatting */
 .cw-speech {
     font-weight: bold;
-    /* Color removed for better contrast/readability per user request */
+    /* Color handled by default text color */
 }
 
 .cw-action {
     font-style: italic;
     color: #666666;
-    /* Medium gray for actions */
+    /* Keep readable gray even in fantasy theme */
 }
