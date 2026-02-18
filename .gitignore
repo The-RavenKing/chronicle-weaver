@@ -20,3 +20,6 @@ Thumbs.db
 assets/*.psd
 assets/*.ai
 assets/*.sketch
+
+# Local Project Tracking
+BUGS-AND-FIXES.md
